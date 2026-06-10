@@ -9,3 +9,14 @@ Thumbs.db
 
 # iCloud / Cloud storage temp files
 *.icloud
+
+# Security / API keys
+.env
+
+# Local outputs
+save/
+
+# Python Cache
+__pycache__/
+*.pyc
+
