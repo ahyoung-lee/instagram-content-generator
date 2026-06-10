@@ -35,13 +35,7 @@ body {
 
 /* Background Overlay for Depth */
 .bg-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at center, rgba(15, 15, 21, 0.1) 0%, rgba(15, 15, 21, 0.4) 100%);
-    z-index: 1;
+    display: none;
 }
 
 .dashboard-container {
