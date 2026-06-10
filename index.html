@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMAD - Instagram Monetization Automation Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background Overlay for Dark/Vibrant feel -->
+    <div class="bg-overlay"></div>
+
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo">
+                IMAD <span>Agent</span>
+            </div>
+            <p class="subtitle">Instagram Monetization Automation Dashboard</p>
+        </header>
+
+        <!-- Main Workspace Card -->
+        <main class="glass-card">
+            <section class="search-section">
+                <h2>실시간 트렌드 기반 콘텐츠 생성</h2>
+                <p class="desc">분석하고 싶은 뉴스 기사나 칼럼의 URL 주소를 입력하세요. 비워둘 경우 최신 뉴스 트렌드를 자동으로 분석합니다.</p>
+                
+                <div class="search-bar">
+                    <input type="url" id="url-input" placeholder="분석할 기사 URL을 입력해 주세요..." aria-label="URL 입력">
+                    <button id="generate-btn" class="btn-primary">Generate</button>
+                </div>
+            </section>
+
+            <!-- Results Section (Initially Hidden) -->
+            <section id="results-section" class="results-section hidden">
+                <hr class="divider">
+                <div class="result-header">
+                    <h3 id="result-title">🎯 생성된 콘텐츠 프리뷰</h3>
+                    <span class="date-badge" id="date-badge">YYYY-MM-DD</span>
+                </div>
+                
+                <div class="preview-container">
+                    <h4>카드뉴스 슬라이드 프리뷰</h4>
+                    <div id="slides-grid" class="slides-grid">
+                        <!-- Dynamic slides images will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="caption-container">
+                    <h4>수익화 본문 캡션 및 해시태그</h4>
+                    <textarea id="caption-text" readonly></textarea>
+                    <div class="caption-actions">
+                        <button id="copy-caption-btn" class="btn-secondary">📋 캡션 복사하기</button>
+                    </div>
+                </div>
+
+                <div class="publish-section">
+                    <button id="publish-btn" class="btn-accent">🚀 Instagram에 즉시 발행</button>
+                </div>
+
+                <!-- API Response Log & Fallback Buttons -->
+                <div id="status-box" class="status-box hidden">
+                    <h4 id="status-title">상태 로그</h4>
+                    <pre id="status-log"></pre>
+                    <div id="fallback-actions" class="fallback-actions hidden">
+                        <p class="warning-text">⚠️ 자동 발행에 실패했거나 로컬 환경인 경우, 아래 버튼을 눌러 수동으로 게시하세요!</p>
+                        <div class="action-buttons">
+                            <a id="download-zip-btn" href="#" class="btn-download" download>📦 이미지 & 캡션 압축 파일 다운로드</a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="main-footer">
+            <p>&copy; 2026 IMAD Agent System &middot; Powered by Antigravity</p>
+        </footer>
+    </div>
+
+    <!-- Fullscreen Walking Loader Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loader-content">
+            <!-- 2D Walking Legs Animation -->
+            <div class="walking-legs">
+                <div class="leg leg-left"></div>
+                <div class="leg leg-right"></div>
+            </div>
+            <p class="loading-text">I’m Walking...</p>
+            <p class="loading-sub">AI 에이전트들이 실시간 기사 크롤링 및 이미지 레이아웃을 생성하는 중입니다.</p>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
