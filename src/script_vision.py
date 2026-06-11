@@ -1,5 +1,12 @@
 import os
-from PIL import Image, ImageDraw, ImageFont
+import requests
+from io import BytesIO
+from openai import OpenAI
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Define Dimensions for 4:5 Instagram Post
 WIDTH = 1080
@@ -139,16 +146,125 @@ def draw_watermark(image: Image.Image, text: str = "@alwaysg00d"):
         
     draw.text((x, y), text, fill=color, font=font)
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str) -> Image.Image:
+def generate_dalle_background(hooking_title: str) -> Image.Image:
+    """
+    Calls OpenAI DALL-E API to generate a background image based on the hooking title.
+    Returns a PIL Image object, or None if generation fails.
+    """
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key or "your_openai_api_key" in openai_key:
+        print("Warning: OPENAI_API_KEY is not configured for DALL-E background generation. Falling back to gradient.")
+        return None
+
+    try:
+        print(f"Generating DALL-E background for: '{hooking_title}'...")
+        client = OpenAI(api_key=openai_key)
+        
+        # Optimize prompt to generate a text-free, abstract, modern dark card news background
+        prompt = (
+            f"A modern premium abstract visual background for an Instagram card news post about: '{hooking_title}'. "
+            "Minimalist and clean layout, dark obsidian and deep navy theme with warm neon orange accent glows. "
+            "Strictly NO text, NO letters, NO words, NO overlay elements, NO human faces. "
+            "High resolution, smooth colors, professional digital art style."
+        )
+        
+        try:
+            # Try DALL-E 3 first (superior quality)
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                n=1,
+                size="1024x1024"
+            )
+        except Exception as e:
+            print(f"DALL-E 3 failed: {e}. Trying DALL-E 2 fallback...")
+            # Fallback to DALL-E 2
+            response = client.images.generate(
+                model="dall-e-2",
+                prompt=prompt,
+                n=1,
+                size="1024x1024"
+            )
+            
+        image_url = response.data[0].url
+        print(f"DALL-E image generated successfully: {image_url}")
+        
+        img_response = requests.get(image_url, timeout=15)
+        img_response.raise_for_status()
+        
+        return Image.open(BytesIO(img_response.content))
+    except Exception as e:
+        print(f"Error generating DALL-E background: {e}. Falling back to gradient.")
+        return None
+
+def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    """
+    Resizes and crops a PIL Image to cover the target dimensions (aspect ratio fill).
+    """
+    img_w, img_h = image.size
+    target_ratio = target_width / target_height
+    img_ratio = img_w / img_h
+
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.ANTIALIAS
+
+    if img_ratio > target_ratio:
+        # Image is wider than target ratio: scale based on height
+        new_h = target_height
+        new_w = int(img_w * (target_height / img_h))
+    else:
+        # Image is taller than target ratio: scale based on width
+        new_w = target_width
+        new_h = int(img_h * (target_width / img_w))
+
+    resized_img = image.resize((new_w, new_h), resample_filter)
+
+    # Crop the center
+    left = (new_w - target_width) // 2
+    top = (new_h - target_height) // 2
+    right = left + target_width
+    bottom = top + target_height
+
+    return resized_img.crop((left, top, right, bottom))
+
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None) -> Image.Image:
     """
     Generates a single 4:5 image slide based on its content and type.
+    If bg_image is provided, it is used as the visual backdrop.
     """
-    # Premium gradient: deep obsidian-indigo to deep rust-orange
-    color_start = (20, 20, 30)
-    color_end = (45, 20, 10)
+    slide_type = slide.get("type", "content")
     
-    # Create gradient background
-    image = draw_gradient_background(WIDTH, HEIGHT, color_start, color_end)
+    if bg_image is not None:
+        # We make a copy of the pre-resized cover image
+        image = bg_image.copy()
+        
+        # Ensure RGBA mode
+        if image.mode != "RGBA":
+            image = image.convert("RGBA")
+            
+        if slide_type != "cover":
+            # Apply Gaussian Blur to content slides
+            image = image.filter(ImageFilter.GaussianBlur(20))
+            
+        # Draw transparent overlay for readability
+        overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        draw_overlay = ImageDraw.Draw(overlay)
+        if slide_type == "cover":
+            # 55% opacity dark overlay for cover
+            draw_overlay.rectangle([0, 0, WIDTH, HEIGHT], fill=(10, 10, 15, 140))
+        else:
+            # 80% opacity dark overlay for content slides
+            draw_overlay.rectangle([0, 0, WIDTH, HEIGHT], fill=(10, 10, 15, 204))
+            
+        image = Image.alpha_composite(image, overlay)
+    else:
+        # Fallback to premium gradient if bg_image is None
+        color_start = (20, 20, 30)
+        color_end = (45, 20, 10)
+        image = draw_gradient_background(WIDTH, HEIGHT, color_start, color_end)
+        
     draw = ImageDraw.Draw(image)
     
     # Key color accent line (bottom border accent)
@@ -157,7 +273,6 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str) -> Image
     
     # Render slide page indicator
     page_num = slide.get("page", 1)
-    slide_type = slide.get("type", "content")
     page_text = f"{page_num} / {total_pages}"
     page_font = get_system_font(24)
     draw.text((WIDTH - 100, 50), page_text, fill=(180, 180, 180, 255), font=page_font)
@@ -235,10 +350,16 @@ def generate_carousel_images(plan: dict, output_dir: str) -> list:
     hooking_title = plan.get("hooking_title", "Trending")
     slides = plan.get("slides", [])
     
+    # Generate DALL-E master background
+    raw_bg = generate_dalle_background(hooking_title)
+    bg_image = None
+    if raw_bg is not None:
+        bg_image = resize_to_cover(raw_bg, WIDTH, HEIGHT)
+        
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
-        img = draw_card_layout(slide, total_pages, hooking_title)
+        img = draw_card_layout(slide, total_pages, hooking_title, bg_image)
         
         filename = f"slide_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)
