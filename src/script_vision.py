@@ -7,15 +7,25 @@ HEIGHT = 1350
 
 def get_system_font(size: int):
     """
-    Attempts to load a standard system font for macOS, falling back to default.
+    Attempts to load the bundled NanumGothic font first, then falls back to macOS/system fonts.
     """
-    font_paths = [
+    # 1. Prioritize local NanumGothic font for Korean character support on all OS
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    bundled_font_path = os.path.join(current_dir, "NanumGothic.ttf")
+    
+    font_paths = []
+    if os.path.exists(bundled_font_path):
+        font_paths.append(bundled_font_path)
+        
+    # 2. System fallbacks
+    font_paths.extend([
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/AppleGothic.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
         "/Library/Fonts/Arial.ttf",
         "/System/Library/Fonts/Supplemental/AppleGothic.ttf"
-    ]
+    ])
+    
     for path in font_paths:
         if os.path.exists(path):
             try:
