@@ -67,7 +67,7 @@ body {
     font-weight: 800;
     letter-spacing: -1px;
     color: #ffffff;
-    text-shadow: 0 0 10px rgba(255, 102, 0, 0.6), 1px 1px 3px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.5);
     display: inline-block;
     animation: logo-glow 3s infinite ease-in-out;
 }
@@ -104,6 +104,10 @@ body {
 }
 
 /* Search and Input Sections */
+.search-section {
+    text-align: center;
+}
+
 .search-section h2 {
     font-size: 1.6rem;
     font-weight: 300;
@@ -557,12 +561,12 @@ body {
 
 @keyframes logo-glow {
     0% {
-        text-shadow: 0 0 8px rgba(255, 102, 0, 0.5), 0 0 15px rgba(255, 102, 0, 0.2), 1px 1px 3px rgba(0, 0, 0, 0.5);
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.6), 0 0 15px rgba(0, 0, 0, 0.4), 1px 1px 3px rgba(0, 0, 0, 0.5);
     }
     50% {
-        text-shadow: 0 0 20px rgba(255, 102, 0, 0.9), 0 0 35px rgba(255, 102, 0, 0.6), 1px 1px 3px rgba(0, 0, 0, 0.5);
+        text-shadow: 0 0 20px rgba(0, 0, 0, 0.95), 0 0 35px rgba(0, 0, 0, 0.8), 1px 1px 3px rgba(0, 0, 0, 0.5);
     }
     100% {
-        text-shadow: 0 0 8px rgba(255, 102, 0, 0.5), 0 0 15px rgba(255, 102, 0, 0.2), 1px 1px 3px rgba(0, 0, 0, 0.5);
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.6), 0 0 15px rgba(0, 0, 0, 0.4), 1px 1px 3px rgba(0, 0, 0, 0.5);
     }
 }
