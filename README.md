@@ -1,5 +1,7 @@
 # Instagram Content Generator & Auto Publisher
 
+https://instagram-content-generator-6tbz.onrender.com/
+
 A FastAPI-based web dashboard that automatically scraps trending news articles, generates optimized Instagram carousel/slide content (4:5 ratio card news) using OpenAI, and publishes them directly to Instagram via Meta Graph API.
 
 ## Features
