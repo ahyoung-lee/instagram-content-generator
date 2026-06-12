@@ -148,16 +148,16 @@ def draw_watermark(image: Image.Image, text: str = "@alwaysg00d"):
 
 def generate_dalle_background(hooking_title: str) -> Image.Image:
     """
-    Calls OpenAI DALL-E API to generate a background image based on the hooking title.
+    Calls OpenAI Image API to generate a background image based on the hooking title.
     Returns a PIL Image object, or None if generation fails.
     """
     openai_key = os.getenv("OPENAI_API_KEY")
     if not openai_key or "your_openai_api_key" in openai_key:
-        print("Warning: OPENAI_API_KEY is not configured for DALL-E background generation. Falling back to gradient.")
+        print("Warning: OPENAI_API_KEY is not configured for AI background generation. Falling back to gradient.")
         return None
 
     try:
-        print(f"Generating DALL-E background for: '{hooking_title}'...")
+        print(f"Generating AI background for: '{hooking_title}'...")
         client = OpenAI(api_key=openai_key)
         
         # Optimize prompt to generate a text-free, abstract, modern dark card news background
@@ -169,32 +169,32 @@ def generate_dalle_background(hooking_title: str) -> Image.Image:
         )
         
         try:
-            # Try DALL-E 3 first (superior quality)
+            # Try gpt-image-1-mini first (extremely cost-efficient, approx 4x cheaper)
             response = client.images.generate(
-                model="dall-e-3",
+                model="gpt-image-1-mini",
                 prompt=prompt,
                 n=1,
                 size="1024x1024"
             )
         except Exception as e:
-            print(f"DALL-E 3 failed: {e}. Trying DALL-E 2 fallback...")
-            # Fallback to DALL-E 2
+            print(f"gpt-image-1-mini failed: {e}. Trying gpt-image-2 fallback...")
+            # Fallback to gpt-image-2 (higher quality flagship, more expensive)
             response = client.images.generate(
-                model="dall-e-2",
+                model="gpt-image-2",
                 prompt=prompt,
                 n=1,
                 size="1024x1024"
             )
             
         image_url = response.data[0].url
-        print(f"DALL-E image generated successfully: {image_url}")
+        print(f"AI image generated successfully: {image_url}")
         
         img_response = requests.get(image_url, timeout=15)
         img_response.raise_for_status()
         
         return Image.open(BytesIO(img_response.content))
     except Exception as e:
-        print(f"Error generating DALL-E background: {e}. Falling back to gradient.")
+        print(f"Error generating AI background: {e}. Falling back to gradient.")
         return None
 
 def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
