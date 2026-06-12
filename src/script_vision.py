@@ -161,14 +161,14 @@ def generate_dalle_background(hooking_title: str) -> Image.Image:
         print(f"Generating AI background via OpenAI for: '{hooking_title}'...")
         client = OpenAI(api_key=openai_key)
         
-        # Optimize prompt to generate a premium conceptual background representing the topic,
-        # with recognizable metaphors/logos/symbols matching the title (like Apple, robots, etc.)
+        # Optimize prompt to generate a highly intuitive, direct visual concept matching the title keywords
         prompt = (
-            f"A premium high-quality conceptual background illustration representing the topic: '{hooking_title}'. "
-            "It should feature modern visual elements, symbols, or metaphoric objects related to the topic (for example, technology icons, futuristic devices, digital concepts, or brand symbolic styles if applicable). "
-            "The design must be clean, elegant, and suitable as an Instagram card news background. "
+            f"A highly intuitive, clear, and direct visual concept representing the key subject of: '{hooking_title}'. "
+            "This is a background for an Instagram post, so it must feature a central, iconic symbol or metaphor matching the keywords. "
+            "For example: if 'Apple' (애플) or 'Siri' (시리) is mentioned, draw a clean iconic Apple logo or a glowing intelligent virtual assistant sphere. If 'robot' or 'AI' is mentioned, draw a sleek futuristic robot or digital brain. "
+            "The image must be simple, centered, visually striking, with a clean and professional layout. "
             "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces. "
-            "Modern digital art style, vibrant and professional color palette matching the topic."
+            "Modern premium digital illustration, with a clean color scheme matching the subject."
         )
         
         try:
@@ -309,24 +309,28 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         draw.text((100, HEIGHT - 150), teaser_text, fill=(200, 200, 200, 255), font=subtitle_font)
         
     elif slide_type == "cta":
-        # CTA Page Layout
-        title_font = get_system_font(52)
-        content_font = get_system_font(42)
-        
-        # Draw top accent
-        draw.text((100, 150), "WHAT TO DO NEXT", fill=key_color, font=get_system_font(32))
+        # Clean Centered CTA Page Layout
+        content_font = get_system_font(48)
         
         main_text = slide.get("main_text", "")
         lines = wrap_text(main_text, content_font, WIDTH - 200)
         
-        y_cursor = 350
+        # Calculate total height to center vertically
+        line_height = 85
+        total_text_height = len(lines) * line_height
+        y_cursor = (HEIGHT - total_text_height) // 2
+        
         for line in lines:
-            draw.text((100, y_cursor), line, fill=(255, 255, 255, 255), font=content_font)
-            y_cursor += 75
-            
-        # Draw action encouragement icon representation
-        draw.rectangle([100, y_cursor + 50, WIDTH - 100, y_cursor + 52], fill=(255, 102, 0, 100))
-        draw.text((100, y_cursor + 80), "❤ 좋아요 | 💾 저장 | 🚀 공유 | 👤 팔로우", fill=(200, 200, 200, 255), font=get_system_font(28))
+            # Calculate text width to center horizontally
+            if hasattr(content_font, "getbbox"):
+                bbox = content_font.getbbox(line)
+                w = bbox[2] - bbox[0]
+            else:
+                w = len(line) * 24
+                
+            x_pos = (WIDTH - w) // 2
+            draw.text((x_pos, y_cursor), line, fill=(255, 255, 255, 255), font=content_font)
+            y_cursor += line_height
 
     else:
         # Standard Content Layout
@@ -350,7 +354,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
     
     return image
 
-def generate_carousel_images(plan: dict, output_dir: str) -> list:
+def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False) -> list:
     """
     Generates all slide images based on the plan and saves them to output_dir.
     Returns a list of generated file paths.
@@ -360,11 +364,28 @@ def generate_carousel_images(plan: dict, output_dir: str) -> list:
     hooking_title = plan.get("hooking_title", "Trending")
     slides = plan.get("slides", [])
     
-    # Generate DALL-E master background
-    raw_bg = generate_dalle_background(hooking_title)
+    master_bg_path = os.path.join(output_dir, "background_master.png")
     bg_image = None
-    if raw_bg is not None:
-        bg_image = resize_to_cover(raw_bg, WIDTH, HEIGHT)
+    
+    if reuse_background and os.path.exists(master_bg_path):
+        print(f"Reusing existing background master image: {master_bg_path}")
+        try:
+            bg_image = Image.open(master_bg_path)
+            bg_image.load()
+        except Exception as e:
+            print(f"Failed to load existing master background: {e}. Generating new one.")
+            bg_image = None
+            
+    if bg_image is None:
+        # Generate DALL-E master background
+        raw_bg = generate_dalle_background(hooking_title)
+        if raw_bg is not None:
+            bg_image = resize_to_cover(raw_bg, WIDTH, HEIGHT)
+            try:
+                bg_image.save(master_bg_path, "PNG")
+                print(f"Saved background master image to: {master_bg_path}")
+            except Exception as e:
+                print(f"Failed to save background master image: {e}")
         
     image_paths = []
     for slide in slides:

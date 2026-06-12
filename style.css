@@ -314,7 +314,7 @@ body {
 }
 
 .btn-accent {
-    background: linear-gradient(135deg, var(--key-color) 0%, #ff0055 100%);
+    background: var(--key-color);
     color: #fff;
     border: none;
     border-radius: 16px;
@@ -324,10 +324,11 @@ body {
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 8px 25px rgba(255, 102, 0, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .btn-accent:hover {
+    background: var(--key-color-hover);
     transform: translateY(-2px);
     box-shadow: 0 12px 30px rgba(255, 102, 0, 0.45);
 }
@@ -371,22 +372,30 @@ body {
     color: #f87171;
     font-size: 0.9rem;
     margin-bottom: 15px;
+    text-align: center;
+}
+
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 10px;
 }
 
 .btn-download {
     display: inline-block;
-    background: #10b981;
+    background: #374151;
     color: #fff;
     text-decoration: none;
     border-radius: 12px;
     padding: 14px 28px;
     font-weight: 600;
-    transition: background 0.2s, transform 0.2s;
+    transition: background-color 0.2s, transform 0.2s;
     text-align: center;
 }
 
 .btn-download:hover {
-    background: #059669;
+    background: #4b5563;
     transform: translateY(-1px);
 }
 

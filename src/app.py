@@ -45,36 +45,19 @@ def api_generate(payload: GenerateRequest):
         os.makedirs(post_dir, exist_ok=True)
         plan_file = os.path.join(post_dir, "plan.json")
         
-        # Check if cache exists and matches the requested URL
+        # Check if cache exists and matches the requested URL for background image reuse
+        reuse_background = False
         if os.path.exists(plan_file):
             try:
                 with open(plan_file, "r", encoding="utf-8") as f:
                     cached_data = json.load(f)
                 
                 cached_req_url = cached_data.get("requested_url")
-                cached_image_paths = cached_data.get("absolute_paths", [])
-                
-                # Verify that all cached images still exist on disk
-                if cached_req_url == payload.url and len(cached_image_paths) > 0:
-                    all_exist = True
-                    for img_path in cached_image_paths:
-                        if not os.path.exists(img_path):
-                            all_exist = False
-                            break
-                    
-                    if all_exist:
-                        print(f"Cache hit! Reusing existing generated files for URL: {payload.url}")
-                        return {
-                            "success": True,
-                            "title": cached_data.get("title"),
-                            "url": cached_data.get("url"),
-                            "plan": cached_data.get("plan"),
-                            "image_urls": cached_data.get("image_urls"),
-                            "date_str": date_str,
-                            "absolute_paths": cached_image_paths
-                        }
+                if cached_req_url == payload.url:
+                    reuse_background = True
+                    print(f"Same URL requested on the same day. Will reuse background image.")
             except Exception as cache_err:
-                print(f"Error reading cache plan.json: {cache_err}. Proceeding with fresh generation.")
+                print(f"Error reading cache plan.json for background check: {cache_err}")
 
         # Step 1: Crawl URL or fallback to RSS trending topic
         trend_result = get_article_text(payload.url)
@@ -86,7 +69,7 @@ def api_generate(payload: GenerateRequest):
         plan = generate_instagram_plan(title, content)
         
         # Step 4: Render 4:5 Pillow images
-        generated_files = generate_carousel_images(plan, post_dir)
+        generated_files = generate_carousel_images(plan, post_dir, reuse_background=reuse_background)
         
         # Format paths relative to static /save mount for the frontend
         relative_image_urls = []

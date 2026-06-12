@@ -70,6 +70,12 @@ def publish_to_instagram(image_paths: list, caption: str, output_dir: str) -> di
     access_token = os.getenv("META_ACCESS_TOKEN")
     public_base_url = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
     
+    # Sanitize inputs by removing leading/trailing whitespaces and quotes
+    if ig_user_id:
+        ig_user_id = ig_user_id.strip().strip("'").strip('"').strip('`')
+    if access_token:
+        access_token = access_token.strip().strip("'").strip('"').strip('`')
+        
     log(f"Initiating Instagram publishing for {len(image_paths)} images...")
     
     # Check basic credentials
