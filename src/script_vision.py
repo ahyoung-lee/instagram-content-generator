@@ -1,5 +1,6 @@
 import os
 import requests
+import urllib.parse
 from io import BytesIO
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -148,28 +149,44 @@ def draw_watermark(image: Image.Image, text: str = "@alwaysg00d"):
 
 def generate_dalle_background(hooking_title: str) -> Image.Image:
     """
-    Calls OpenAI Image API to generate a background image based on the hooking title.
-    Returns a PIL Image object, or None if generation fails.
+    Generates a background image matching the news title.
+    1. Try Pollinations AI (100% Free, Flux/SDXL model)
+    2. Fall back to OpenAI Image API if Pollinations fails (if OpenAI key is set)
+    3. Fall back to vertical linear gradient if both fail
     """
+    # Optimize prompt to generate a text-free, abstract, modern dark card news background
+    prompt = (
+        f"A modern premium abstract visual background for an Instagram card news post about: '{hooking_title}'. "
+        "Minimalist and clean layout, dark obsidian and deep navy theme with warm neon orange accent glows. "
+        "Strictly NO text, NO letters, NO words, NO overlay elements, NO human faces. "
+        "High resolution, smooth colors, professional digital art style."
+    )
+
+    # 1. Try Pollinations AI (Free)
+    try:
+        print(f"Generating Free AI background via Pollinations AI for: '{hooking_title}'...")
+        encoded_prompt = urllib.parse.quote(prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&private=true"
+        
+        img_response = requests.get(url, timeout=20)
+        img_response.raise_for_status()
+        print("Free AI image generated successfully via Pollinations AI.")
+        return Image.open(BytesIO(img_response.content))
+    except Exception as poll_err:
+        print(f"Pollinations AI failed: {poll_err}. Trying OpenAI fallback...")
+
+    # 2. Try OpenAI Fallback
     openai_key = os.getenv("OPENAI_API_KEY")
     if not openai_key or "your_openai_api_key" in openai_key:
-        print("Warning: OPENAI_API_KEY is not configured for AI background generation. Falling back to gradient.")
+        print("Warning: OPENAI_API_KEY is not configured. Falling back to gradient.")
         return None
 
     try:
-        print(f"Generating AI background for: '{hooking_title}'...")
+        print(f"Generating AI background via OpenAI for: '{hooking_title}'...")
         client = OpenAI(api_key=openai_key)
         
-        # Optimize prompt to generate a text-free, abstract, modern dark card news background
-        prompt = (
-            f"A modern premium abstract visual background for an Instagram card news post about: '{hooking_title}'. "
-            "Minimalist and clean layout, dark obsidian and deep navy theme with warm neon orange accent glows. "
-            "Strictly NO text, NO letters, NO words, NO overlay elements, NO human faces. "
-            "High resolution, smooth colors, professional digital art style."
-        )
-        
         try:
-            # Try gpt-image-1-mini first (extremely cost-efficient, approx 4x cheaper)
+            # Try gpt-image-1-mini first (extremely cost-efficient)
             response = client.images.generate(
                 model="gpt-image-1-mini",
                 prompt=prompt,
@@ -187,14 +204,14 @@ def generate_dalle_background(hooking_title: str) -> Image.Image:
             )
             
         image_url = response.data[0].url
-        print(f"AI image generated successfully: {image_url}")
+        print(f"OpenAI AI image generated successfully: {image_url}")
         
         img_response = requests.get(image_url, timeout=15)
         img_response.raise_for_status()
         
         return Image.open(BytesIO(img_response.content))
     except Exception as e:
-        print(f"Error generating AI background: {e}. Falling back to gradient.")
+        print(f"Error generating AI background via OpenAI: {e}. Falling back to gradient.")
         return None
 
 def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
