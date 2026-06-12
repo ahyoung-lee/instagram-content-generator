@@ -110,7 +110,7 @@ body {
 
 .search-section h2 {
     font-size: 1.6rem;
-    font-weight: 300;
+    font-weight: 700;
     margin-bottom: 8px;
     color: #fff;
 }
@@ -202,6 +202,7 @@ body {
 .result-header h3 {
     font-size: 1.4rem;
     color: #fff;
+    font-weight: 700;
 }
 
 .date-badge {
@@ -219,7 +220,7 @@ body {
     font-size: 1.1rem;
     color: #fff;
     margin-bottom: 15px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .slides-grid {

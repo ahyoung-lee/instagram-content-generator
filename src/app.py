@@ -40,8 +40,14 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 @app.post("/api/generate")
 def api_generate(payload: GenerateRequest):
     try:
+        import hashlib
         date_str = datetime.now().strftime("%Y-%m-%d")
-        post_dir = os.path.join(SAVE_DIR, date_str)
+        
+        # Determine unique subfolder for this URL to isolate caching
+        url_normalized = (payload.url or "trending_rss").strip().lower().rstrip('/')
+        url_hash = hashlib.md5(url_normalized.encode('utf-8')).hexdigest()[:12]
+        
+        post_dir = os.path.join(SAVE_DIR, date_str, url_hash)
         os.makedirs(post_dir, exist_ok=True)
         plan_file = os.path.join(post_dir, "plan.json")
         
@@ -75,7 +81,7 @@ def api_generate(payload: GenerateRequest):
         relative_image_urls = []
         for file_path in generated_files:
             filename = os.path.basename(file_path)
-            relative_image_urls.append(f"/save/{date_str}/{filename}")
+            relative_image_urls.append(f"/save/{date_str}/{url_hash}/{filename}")
             
         # Save to plan.json cache
         cache_content = {
@@ -99,7 +105,7 @@ def api_generate(payload: GenerateRequest):
             "url": scraped_url,
             "plan": plan,
             "image_urls": relative_image_urls,
-            "date_str": date_str,
+            "date_str": f"{date_str}/{url_hash}",
             "absolute_paths": generated_files
         }
         
@@ -126,6 +132,32 @@ def api_publish(payload: PublishRequest):
                 
         # Call publishing pipeline
         pub_result = publish_to_instagram(resolved_paths, payload.caption, post_dir)
+        
+        # Automatically copy the published/edited images, caption and zip to today's date folder
+        try:
+            import shutil
+            daily_dir = os.path.dirname(post_dir)
+            if daily_dir != SAVE_DIR: # Make sure we copy to save/YYYY-MM-DD instead of save/
+                os.makedirs(daily_dir, exist_ok=True)
+                for file_path in resolved_paths:
+                    if os.path.exists(file_path):
+                        shutil.copy(file_path, os.path.join(daily_dir, os.path.basename(file_path)))
+                
+                # Copy caption.txt and zip files if they exist in post_dir
+                caption_file = os.path.join(post_dir, "caption.txt")
+                if os.path.exists(caption_file):
+                    # Update caption.txt with user-edited caption inside today's folder
+                    with open(os.path.join(daily_dir, "caption.txt"), "w", encoding="utf-8") as f:
+                        f.write(payload.caption)
+                
+                # Copy zip
+                for filename in os.listdir(post_dir):
+                    if filename.endswith(".zip"):
+                        shutil.copy(os.path.join(post_dir, filename), os.path.join(daily_dir, filename))
+                print(f"Automatically saved/copied publication assets to: {daily_dir}")
+        except Exception as copy_err:
+            print(f"Error copying publication assets to daily dir: {copy_err}")
+            
         return pub_result
         
     except Exception as e:

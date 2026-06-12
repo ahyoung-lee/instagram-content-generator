@@ -191,7 +191,7 @@ publishBtn.addEventListener('click', async () => {
             },
             body: JSON.stringify({
                 image_paths: currentPostData.image_paths,
-                caption: currentPostData.caption,
+                caption: captionText.value, // Read edited caption directly from textarea
                 date_str: currentPostData.date_str
             })
         });

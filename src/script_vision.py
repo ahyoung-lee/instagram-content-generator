@@ -43,6 +43,28 @@ def get_system_font(size: int):
     # Fallback to default Pillow font if none found
     return ImageFont.load_default()
 
+def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, **kwargs):
+    """
+    Safely draws text, utilizing Pillow's native stroke_width if supported,
+    or falls back to fake bold (drawing text multiple times with an offset)
+    for older Pillow versions.
+    """
+    try:
+        if stroke_width > 0:
+            draw.text(xy, text, fill=fill, font=font, stroke_width=stroke_width, stroke_fill=fill, **kwargs)
+        else:
+            draw.text(xy, text, fill=fill, font=font, **kwargs)
+    except TypeError:
+        # Fallback for old Pillow versions
+        if stroke_width > 0:
+            x, y = xy
+            # Draw fake bold by layering text with pixel offsets
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    draw.text((x + dx, y + dy), text, fill=fill, font=font, **kwargs)
+        else:
+            draw.text(xy, text, fill=fill, font=font, **kwargs)
+
 def draw_gradient_background(width: int, height: int, color_start: tuple, color_end: tuple) -> Image.Image:
     """
     Creates a smooth vertical linear gradient background.
@@ -293,20 +315,20 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         subtitle_font = get_system_font(32)
         
         # Draw top accent label
-        draw.text((100, 150), "TRENDING INSIGHT", fill=key_color, font=subtitle_font)
+        draw_text_safe(draw, (100, 150), "TRENDING INSIGHT", fill=key_color, font=subtitle_font, stroke_width=1)
         
-        # Draw Main Title
+        # Draw Main Title (Bold)
         title_text = slide.get("main_text", hooking_title)
         lines = wrap_text(title_text, title_font, WIDTH - 200)
         
         y_cursor = 350
         for line in lines:
-            draw.text((100, y_cursor), line, fill=(255, 255, 255, 255), font=title_font)
+            draw_text_safe(draw, (100, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=2)
             y_cursor += 90
             
         # Draw CTA teaser at the bottom
         teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
-        draw.text((100, HEIGHT - 150), teaser_text, fill=(200, 200, 200, 255), font=subtitle_font)
+        draw_text_safe(draw, (100, HEIGHT - 150), teaser_text, fill=(200, 200, 200, 255), font=subtitle_font)
         
     elif slide_type == "cta":
         # Clean Centered CTA Page Layout
@@ -329,7 +351,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 w = len(line) * 24
                 
             x_pos = (WIDTH - w) // 2
-            draw.text((x_pos, y_cursor), line, fill=(255, 255, 255, 255), font=content_font)
+            draw_text_safe(draw, (x_pos, y_cursor), line, fill=(255, 255, 255, 255), font=content_font, stroke_width=1)
             y_cursor += line_height
 
     else:
@@ -337,16 +359,16 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         header_font = get_system_font(36)
         content_font = get_system_font(45)
         
-        # Draw header section
+        # Draw header section (Bold)
         header_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-        draw.text((100, 150), header_text, fill=key_color, font=header_font)
+        draw_text_safe(draw, (100, 150), header_text, fill=key_color, font=header_font, stroke_width=1)
         
         main_text = slide.get("main_text", "")
         lines = wrap_text(main_text, content_font, WIDTH - 200)
         
         y_cursor = 350
         for line in lines:
-            draw.text((100, y_cursor), line, fill=(255, 255, 255, 255), font=content_font)
+            draw_text_safe(draw, (100, y_cursor), line, fill=(255, 255, 255, 255), font=content_font)
             y_cursor += 80
             
     # Apply relative luminance watermark
