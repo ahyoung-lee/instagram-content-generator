@@ -75,7 +75,7 @@ def api_generate(payload: GenerateRequest):
         plan = generate_instagram_plan(title, content)
         
         # Step 4: Render 4:5 Pillow images
-        generated_files = generate_carousel_images(plan, post_dir, reuse_background=reuse_background)
+        generated_files = generate_carousel_images(plan, post_dir, reuse_background=reuse_background, article_title=title)
         
         # Format paths relative to static /save mount for the frontend
         relative_image_urls = []

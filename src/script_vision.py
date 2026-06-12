@@ -136,38 +136,44 @@ def get_relative_luminance(image: Image.Image, box: tuple) -> float:
     
     return 0.2126 * avg_r + 0.7152 * avg_g + 0.0722 * avg_b
 
-def draw_watermark(image: Image.Image, text: str = "@alwaysg00d"):
+def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
     """
-    Draws a watermark at the bottom of the image, adjusting contrast
-    dynamically based on the background's relative luminance.
+    Loads 'img/alwaysgood_logo.png', resizes it to a suitable size,
+    adjusts its opacity, and pastes it in the bottom-right corner of the image.
     """
-    draw = ImageDraw.Draw(image)
-    font_size = 28
-    font = get_system_font(font_size)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    workspace_root = os.path.dirname(current_dir)
+    logo_path = os.path.join(workspace_root, "img", "alwaysgood_logo.png")
     
-    # Estimate watermark size
-    if hasattr(font, "getbbox"):
-        bbox = font.getbbox(text)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
-    else:
-        w = len(text) * 16
-        h = 24
+    if not os.path.exists(logo_path):
+        # Fallback if run from workspace root
+        logo_path = os.path.join("img", "alwaysgood_logo.png")
+        if not os.path.exists(logo_path):
+            print(f"Warning: Logo watermark not found at {logo_path}")
+            return
+            
+    try:
+        logo = Image.open(logo_path).convert("RGBA")
         
-    x = (WIDTH - w) // 2
-    y = HEIGHT - 80
-    
-    # Calculate luminance in the target drawing box
-    box = (x, y, x + w, y + h)
-    luminance = get_relative_luminance(image, box)
-    
-    # If background is bright, draw dark gray/black. If dark, draw white.
-    if luminance > 0.5:
-        color = (30, 30, 30, 180) # Dark gray with opacity
-    else:
-        color = (240, 240, 240, 180) # Light gray with opacity
+        # Determine target watermark size (e.g., width 160px)
+        target_width = 160
+        aspect_ratio = logo.height / logo.width
+        target_height = int(target_width * aspect_ratio)
+        logo = logo.resize((target_width, target_height), Image.Resampling.LANCZOS)
         
-    draw.text((x, y), text, fill=color, font=font)
+        # Apply opacity to alpha channel
+        r, g, b, a = logo.split()
+        a = a.point(lambda p: int(p * opacity))
+        transparent_logo = Image.merge("RGBA", (r, g, b, a))
+        
+        # Place in bottom-right corner with padding
+        x = WIDTH - target_width - 50
+        y = HEIGHT - target_height - 50
+        
+        # Paste with transparent mask
+        image.paste(transparent_logo, (x, y), transparent_logo)
+    except Exception as e:
+        print(f"Failed to draw logo watermark: {e}")
 
 def generate_dalle_background(hooking_title: str) -> Image.Image:
     """
@@ -261,7 +267,7 @@ def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -
 
     return resized_img.crop((left, top, right, bottom))
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None) -> Image.Image:
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None) -> Image.Image:
     """
     Generates a single 4:5 image slide based on its content and type.
     If bg_image is provided, it is used as the visual backdrop.
@@ -317,8 +323,15 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # Draw top accent label
         draw_text_safe(draw, (100, 150), "TRENDING INSIGHT", fill=key_color, font=subtitle_font, stroke_width=1)
         
-        # Draw Main Title (Bold)
+        # Draw Main Title (Bold) - use article title if available, truncated to 35 chars
         title_text = slide.get("main_text", hooking_title)
+        if article_title and article_title.strip():
+            clean_title = article_title.strip()
+            if len(clean_title) > 35:
+                title_text = clean_title[:35] + "..."
+            else:
+                title_text = clean_title
+                
         lines = wrap_text(title_text, title_font, WIDTH - 200)
         
         y_cursor = 350
@@ -342,7 +355,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         total_text_height = len(lines) * line_height
         y_cursor = (HEIGHT - total_text_height) // 2
         
-        for line in lines:
+        for idx, line in enumerate(lines):
             # Calculate text width to center horizontally
             if hasattr(content_font, "getbbox"):
                 bbox = content_font.getbbox(line)
@@ -351,7 +364,14 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 w = len(line) * 24
                 
             x_pos = (WIDTH - w) // 2
-            draw_text_safe(draw, (x_pos, y_cursor), line, fill=(255, 255, 255, 255), font=content_font, stroke_width=1)
+            
+            # Color the first line (or matching CTA line) in key color
+            if idx == 0 or "마음에 들었다면" in line:
+                line_color = key_color
+            else:
+                line_color = (255, 255, 255, 255)
+                
+            draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=content_font, stroke_width=1)
             y_cursor += line_height
 
     else:
@@ -371,12 +391,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             draw_text_safe(draw, (100, y_cursor), line, fill=(255, 255, 255, 255), font=content_font)
             y_cursor += 80
             
-    # Apply relative luminance watermark
-    draw_watermark(image, "@alwaysg00d")
+    # Apply logo watermark to the bottom right corner
+    draw_logo_watermark(image)
     
     return image
 
-def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False) -> list:
+def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None) -> list:
     """
     Generates all slide images based on the plan and saves them to output_dir.
     Returns a list of generated file paths.
@@ -412,7 +432,7 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
-        img = draw_card_layout(slide, total_pages, hooking_title, bg_image)
+        img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title)
         
         filename = f"slide_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)

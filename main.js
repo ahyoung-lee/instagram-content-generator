@@ -105,6 +105,8 @@ generateBtn.addEventListener('click', async () => {
             // Populate UI Elements
             dateBadge.textContent = data.date_str;
             captionText.value = data.plan.final_caption;
+            captionText.readOnly = false;
+            captionText.removeAttribute('readonly');
             
             // Render Slide Images Preview
             slidesGrid.innerHTML = '';
@@ -230,6 +232,13 @@ publishBtn.addEventListener('click', async () => {
 // Initialize backgrounds on load
 window.addEventListener('DOMContentLoaded', () => {
     initializeBackgroundRotation();
+    
+    // Explicitly make sure caption text area is editable
+    const captionText = document.getElementById('caption-text');
+    if (captionText) {
+        captionText.readOnly = false;
+        captionText.removeAttribute('readonly');
+    }
     
     // Modal Close Handlers
     const imageModal = document.getElementById('image-modal');
