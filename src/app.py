@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +40,42 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 @app.post("/api/generate")
 def api_generate(payload: GenerateRequest):
     try:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        post_dir = os.path.join(SAVE_DIR, date_str)
+        os.makedirs(post_dir, exist_ok=True)
+        plan_file = os.path.join(post_dir, "plan.json")
+        
+        # Check if cache exists and matches the requested URL
+        if os.path.exists(plan_file):
+            try:
+                with open(plan_file, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+                
+                cached_req_url = cached_data.get("requested_url")
+                cached_image_paths = cached_data.get("absolute_paths", [])
+                
+                # Verify that all cached images still exist on disk
+                if cached_req_url == payload.url and len(cached_image_paths) > 0:
+                    all_exist = True
+                    for img_path in cached_image_paths:
+                        if not os.path.exists(img_path):
+                            all_exist = False
+                            break
+                    
+                    if all_exist:
+                        print(f"Cache hit! Reusing existing generated files for URL: {payload.url}")
+                        return {
+                            "success": True,
+                            "title": cached_data.get("title"),
+                            "url": cached_data.get("url"),
+                            "plan": cached_data.get("plan"),
+                            "image_urls": cached_data.get("image_urls"),
+                            "date_str": date_str,
+                            "absolute_paths": cached_image_paths
+                        }
+            except Exception as cache_err:
+                print(f"Error reading cache plan.json: {cache_err}. Proceeding with fresh generation.")
+
         # Step 1: Crawl URL or fallback to RSS trending topic
         trend_result = get_article_text(payload.url)
         title = trend_result.get("title", "Trending")
@@ -48,11 +85,6 @@ def api_generate(payload: GenerateRequest):
         # Step 2: Use LLM agent to create structured slide copy and captions
         plan = generate_instagram_plan(title, content)
         
-        # Step 3: Set up output directory: save/YYYY-MM-DD
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        post_dir = os.path.join(SAVE_DIR, date_str)
-        os.makedirs(post_dir, exist_ok=True)
-        
         # Step 4: Render 4:5 Pillow images
         generated_files = generate_carousel_images(plan, post_dir)
         
@@ -61,6 +93,21 @@ def api_generate(payload: GenerateRequest):
         for file_path in generated_files:
             filename = os.path.basename(file_path)
             relative_image_urls.append(f"/save/{date_str}/{filename}")
+            
+        # Save to plan.json cache
+        cache_content = {
+            "requested_url": payload.url,
+            "title": title,
+            "url": scraped_url,
+            "plan": plan,
+            "image_urls": relative_image_urls,
+            "absolute_paths": generated_files
+        }
+        try:
+            with open(plan_file, "w", encoding="utf-8") as f:
+                json.dump(cache_content, f, ensure_ascii=False, indent=4)
+        except Exception as cache_save_err:
+            print(f"Error saving cache plan.json: {cache_save_err}")
             
         # Return plan along with the paths
         return {
