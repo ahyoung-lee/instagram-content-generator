@@ -111,6 +111,7 @@ generateBtn.addEventListener('click', async () => {
             data.image_urls.forEach((url, index) => {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'slide-preview-wrapper';
+                wrapper.style.cursor = 'pointer';
                 
                 const img = document.createElement('img');
                 img.src = url;
@@ -122,6 +123,15 @@ generateBtn.addEventListener('click', async () => {
                 
                 wrapper.appendChild(img);
                 wrapper.appendChild(badge);
+                
+                // Click to open preview modal
+                wrapper.addEventListener('click', () => {
+                    const modal = document.getElementById('image-modal');
+                    const modalImg = document.getElementById('modal-img');
+                    modal.classList.remove('hidden');
+                    modalImg.src = url;
+                });
+                
                 slidesGrid.appendChild(wrapper);
             });
             
@@ -220,4 +230,25 @@ publishBtn.addEventListener('click', async () => {
 // Initialize backgrounds on load
 window.addEventListener('DOMContentLoaded', () => {
     initializeBackgroundRotation();
+    
+    // Modal Close Handlers
+    const imageModal = document.getElementById('image-modal');
+    const modalClose = document.querySelector('.modal-close');
+    if (imageModal && modalClose) {
+        modalClose.addEventListener('click', () => {
+            imageModal.classList.add('hidden');
+        });
+        // Close on clicking overlay background
+        imageModal.addEventListener('click', (e) => {
+            if (e.target === imageModal || e.target.classList.contains('modal-content-wrapper')) {
+                imageModal.classList.add('hidden');
+            }
+        });
+        // Close on Escape key press
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                imageModal.classList.add('hidden');
+            }
+        });
+    }
 });

@@ -161,12 +161,14 @@ def generate_dalle_background(hooking_title: str) -> Image.Image:
         print(f"Generating AI background via OpenAI for: '{hooking_title}'...")
         client = OpenAI(api_key=openai_key)
         
-        # Optimize prompt to generate a text-free, abstract, modern dark card news background
+        # Optimize prompt to generate a premium conceptual background representing the topic,
+        # with recognizable metaphors/logos/symbols matching the title (like Apple, robots, etc.)
         prompt = (
-            f"A modern premium abstract visual background for an Instagram card news post about: '{hooking_title}'. "
-            "Minimalist and clean layout, dark obsidian and deep navy theme with warm neon orange accent glows. "
-            "Strictly NO text, NO letters, NO words, NO overlay elements, NO human faces. "
-            "High resolution, smooth colors, professional digital art style."
+            f"A premium high-quality conceptual background illustration representing the topic: '{hooking_title}'. "
+            "It should feature modern visual elements, symbols, or metaphoric objects related to the topic (for example, technology icons, futuristic devices, digital concepts, or brand symbolic styles if applicable). "
+            "The design must be clean, elegant, and suitable as an Instagram card news background. "
+            "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces. "
+            "Modern digital art style, vibrant and professional color palette matching the topic."
         )
         
         try:
