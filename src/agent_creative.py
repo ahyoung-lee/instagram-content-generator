@@ -27,12 +27,12 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
             {
                 "page": 2,
                 "type": "content",
-                "main_text": "1단계: TrendScout 에이전트가\n실시간으로 트렌딩 뉴스를 크롤링하여\n핫한 주제를 선별합니다."
+                "main_text": "1단계: TrendScout 에이전트 🕵️‍♂️\n실시간으로 트렌딩 뉴스를 크롤링하여\n핫한 주제를 선별합니다 🔥."
             },
             {
                 "page": 3,
                 "type": "content",
-                "main_text": "2단계: CreativeWriter가\n도파민을 자극하는 문구와\n수익화 CTA가 담긴 슬라이드를 구성합니다."
+                "main_text": "2단계: CreativeWriter ✍️\n도파민을 자극하는 문구와\n수익화 CTA가 담긴 슬라이드를 구성합니다 💰."
             },
             {
                 "page": 4,
@@ -92,7 +92,7 @@ JSON 스키마:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 마케팅 에이전트다."},
+                    {"role": "system", "content": "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 마케팅 에이전트다. 2번째 카드뉴스 내용(페이지)부터는 각 요점과 문맥에 어울리는 풍부한 이모지/이모티콘을 2개 이상 적극적으로 사용하여 독자의 흥미를 끌고 가독성을 높여야 한다."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_object"},
@@ -105,7 +105,7 @@ JSON 스키마:
                 response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 마케팅 에이전트다."},
+                        {"role": "system", "content": "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 마케팅 에이전트다. 2번째 카드뉴스 내용(페이지)부터는 각 요점과 문맥에 어울리는 풍부한 이모지/이모티콘을 2개 이상 적극적으로 사용하여 독자의 흥미를 끌고 가독성을 높여야 한다."},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"},
@@ -117,7 +117,7 @@ JSON 스키마:
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 마케팅 에이전트다."},
+                        {"role": "system", "content": "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 마케팅 에이전트다. 2번째 카드뉴스 내용(페이지)부터는 각 요점과 문맥에 어울리는 풍부한 이모지/이모티콘을 2개 이상 적극적으로 사용하여 독자의 흥미를 끌고 가독성을 높여야 한다."},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"},

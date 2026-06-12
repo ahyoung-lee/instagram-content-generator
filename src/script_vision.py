@@ -159,7 +159,13 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
         target_width = 160
         aspect_ratio = logo.height / logo.width
         target_height = int(target_width * aspect_ratio)
-        logo = logo.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        
+        try:
+            resample_filter = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample_filter = Image.ANTIALIAS
+            
+        logo = logo.resize((target_width, target_height), resample_filter)
         
         # Apply opacity to alpha channel
         r, g, b, a = logo.split()
@@ -338,10 +344,6 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         for line in lines:
             draw_text_safe(draw, (100, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=2)
             y_cursor += 90
-            
-        # Draw CTA teaser at the bottom
-        teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
-        draw_text_safe(draw, (100, HEIGHT - 150), teaser_text, fill=(200, 200, 200, 255), font=subtitle_font)
         
     elif slide_type == "cta":
         # Clean Centered CTA Page Layout
