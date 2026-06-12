@@ -43,27 +43,106 @@ def get_system_font(size: int):
     # Fallback to default Pillow font if none found
     return ImageFont.load_default()
 
+def get_emoji_font(size: int):
+    """
+    Attempts to locate standard system emoji fonts for Windows, macOS, or Linux.
+    """
+    paths = [
+        "C:\\Windows\\Fonts\\seguiemj.ttf",  # Windows standard emoji font
+        "/System/Library/Fonts/Apple Color Emoji.ttc",  # macOS standard
+        "/System/Library/Fonts/Apple Color Emoji.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",  # Linux Noto Emoji
+        "/usr/share/fonts/truetype/emoji/NotoColorEmoji.ttf"
+    ]
+    for path in paths:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    return None
+
+def is_emoji(char: str) -> bool:
+    ord_val = ord(char)
+    # Common emoji Unicode blocks
+    return (
+        0x1F300 <= ord_val <= 0x1F9FF or
+        0x1FA70 <= ord_val <= 0x1FAFF or
+        0x2600 <= ord_val <= 0x27BF or
+        0x1F100 <= ord_val <= 0x1F1FF
+    )
+
+def split_emojis(text: str) -> list:
+    segments = []
+    current_segment = []
+    is_current_emoji = None
+    
+    for char in text:
+        char_is_emoji = is_emoji(char)
+        if is_current_emoji is None:
+            is_current_emoji = char_is_emoji
+            current_segment.append(char)
+        elif is_current_emoji == char_is_emoji:
+            current_segment.append(char)
+        else:
+            segments.append(("".join(current_segment), is_current_emoji))
+            current_segment = [char]
+            is_current_emoji = char_is_emoji
+            
+    if current_segment:
+        segments.append(("".join(current_segment), is_current_emoji))
+        
+    return segments
+
 def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, **kwargs):
     """
-    Safely draws text, utilizing Pillow's native stroke_width if supported,
-    or falls back to fake bold (drawing text multiple times with an offset)
-    for older Pillow versions.
+    Safely draws text. Detects emojis and draws them using system emoji fonts
+    if available to avoid rendering tofu (blank squares).
     """
-    try:
-        if stroke_width > 0:
-            draw.text(xy, text, fill=fill, font=font, stroke_width=stroke_width, stroke_fill=fill, **kwargs)
+    emoji_font = None
+    if hasattr(font, "size"):
+        emoji_font = get_emoji_font(font.size)
+        
+    if emoji_font is None:
+        try:
+            if stroke_width > 0:
+                draw.text(xy, text, fill=fill, font=font, stroke_width=stroke_width, stroke_fill=fill, **kwargs)
+            else:
+                draw.text(xy, text, fill=fill, font=font, **kwargs)
+        except TypeError:
+            if stroke_width > 0:
+                x, y = xy
+                for dx in range(-1, 2):
+                    for dy in range(-1, 2):
+                        draw.text((x + dx, y + dy), text, fill=fill, font=font, **kwargs)
+            else:
+                draw.text(xy, text, fill=fill, font=font, **kwargs)
+        return
+
+    # Draw segments sequentially
+    segments = split_emojis(text)
+    x, y = xy
+    for segment, is_seg_emoji in segments:
+        current_font = emoji_font if is_seg_emoji else font
+        try:
+            if stroke_width > 0 and not is_seg_emoji:
+                draw.text((x, y), segment, fill=fill, font=current_font, stroke_width=stroke_width, stroke_fill=fill, **kwargs)
+            else:
+                draw.text((x, y), segment, fill=fill, font=current_font, **kwargs)
+        except TypeError:
+            if stroke_width > 0 and not is_seg_emoji:
+                for dx in range(-1, 2):
+                    for dy in range(-1, 2):
+                        draw.text((x + dx, y + dy), segment, fill=fill, font=current_font, **kwargs)
+            else:
+                draw.text((x, y), segment, fill=fill, font=current_font, **kwargs)
+                
+        # Advance x coordinate
+        if hasattr(draw, "textlength"):
+            w = draw.textlength(segment, font=current_font)
         else:
-            draw.text(xy, text, fill=fill, font=font, **kwargs)
-    except TypeError:
-        # Fallback for old Pillow versions
-        if stroke_width > 0:
-            x, y = xy
-            # Draw fake bold by layering text with pixel offsets
-            for dx in range(-1, 2):
-                for dy in range(-1, 2):
-                    draw.text((x + dx, y + dy), text, fill=fill, font=font, **kwargs)
-        else:
-            draw.text(xy, text, fill=fill, font=font, **kwargs)
+            w = current_font.getbbox(segment)[2] - current_font.getbbox(segment)[0]
+        x += w
 
 def draw_gradient_background(width: int, height: int, color_start: tuple, color_end: tuple) -> Image.Image:
     """

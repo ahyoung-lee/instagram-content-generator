@@ -116,7 +116,7 @@ generateBtn.addEventListener('click', async () => {
                 wrapper.style.cursor = 'pointer';
                 
                 const img = document.createElement('img');
-                img.src = url;
+                img.src = url + '?t=' + Date.now();
                 img.alt = `Slide ${index + 1}`;
                 
                 const badge = document.createElement('div');
@@ -131,7 +131,7 @@ generateBtn.addEventListener('click', async () => {
                     const modal = document.getElementById('image-modal');
                     const modalImg = document.getElementById('modal-img');
                     modal.classList.remove('hidden');
-                    modalImg.src = url;
+                    modalImg.src = url + '?t=' + Date.now();
                 });
                 
                 slidesGrid.appendChild(wrapper);
