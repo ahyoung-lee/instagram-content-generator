@@ -187,13 +187,20 @@ def generate_dalle_background(hooking_title: str) -> Image.Image:
                 size="1024x1024"
             )
             
-        image_url = response.data[0].url
-        print(f"AI image generated successfully: {image_url}")
-        
-        img_response = requests.get(image_url, timeout=15)
-        img_response.raise_for_status()
-        
-        return Image.open(BytesIO(img_response.content))
+        # Parse result: support both url and base64 formats
+        image_data = response.data[0]
+        if hasattr(image_data, 'b64_json') and image_data.b64_json:
+            import base64
+            print("AI image generated successfully (Base64 format).")
+            return Image.open(BytesIO(base64.b64decode(image_data.b64_json)))
+        elif hasattr(image_data, 'url') and image_data.url:
+            image_url = image_data.url
+            print(f"AI image generated successfully (URL format): {image_url}")
+            img_response = requests.get(image_url, timeout=15)
+            img_response.raise_for_status()
+            return Image.open(BytesIO(img_response.content))
+        else:
+            raise ValueError("No image data (b64_json or url) returned in OpenAI response.")
     except Exception as e:
         print(f"Error generating AI background via OpenAI: {e}. Falling back to gradient.")
         return None
