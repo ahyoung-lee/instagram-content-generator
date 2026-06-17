@@ -355,9 +355,11 @@ def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None) -> Image.Image:
     """
     Generates a single 4:5 image slide based on its content and type.
-    Uses a premium glassmorphic card news layout structure.
+    Uses a premium glassmorphic card news layout structure for content/CTA,
+    and a bold bottom-gradient layout for the cover to make the title pop.
     """
     slide_type = slide.get("type", "content")
+    key_color = (255, 102, 0, 255) # #FF6600
     
     if bg_image is not None:
         # We make a copy of the pre-resized cover image
@@ -370,10 +372,21 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         if slide_type != "cover":
             # Apply Gaussian Blur to content slides
             image = image.filter(ImageFilter.GaussianBlur(15))
-            
-        # Draw transparent overlay to darken slightly
-        overlay = Image.new("RGBA", (WIDTH, HEIGHT), (10, 10, 15, 80)) # ~30% opacity
-        image = Image.alpha_composite(image, overlay)
+            # Draw standard transparent overlay for content slides
+            overlay = Image.new("RGBA", (WIDTH, HEIGHT), (10, 10, 15, 80)) # ~30% opacity
+            image = Image.alpha_composite(image, overlay)
+        else:
+            # For Cover Slide: Crisp background with bottom-up dark gradient shadow
+            gradient_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+            g_draw = ImageDraw.Draw(gradient_overlay)
+            start_y = 500
+            end_y = 1350
+            for y in range(start_y, end_y):
+                # Calculate alpha: linear transition from 0 to 240
+                alpha = int(240 * (y - start_y) / (end_y - start_y))
+                # Draw a horizontal line
+                g_draw.line([(0, y), (WIDTH, y)], fill=(10, 10, 15, alpha))
+            image = Image.alpha_composite(image, gradient_overlay)
     else:
         # Fallback to premium gradient if bg_image is None
         color_start = (20, 20, 30)
@@ -382,56 +395,37 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         if image.mode != "RGBA":
             image = image.convert("RGBA")
             
-    # Define layout dimensions
-    card_x0, card_y0 = 80, 240
-    card_x1, card_y1 = WIDTH - 80, HEIGHT - 220
-    
-    # 1. Create card overlay layer for premium glassmorphism
-    card_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    card_draw = ImageDraw.Draw(card_overlay)
-    
-    # Choose card fill and border color based on slide type
-    if slide_type == "cover":
-        card_fill = (12, 12, 20, 190)  # ~75% opacity dark slate
-        card_border = (255, 255, 255, 50)  # Subtle white border
-    elif slide_type == "cta":
-        card_fill = (12, 12, 20, 215)  # Slightly higher opacity for final slide contrast
-        card_border = (255, 102, 0, 90)  # Subtle orange highlight border
-    else:
-        card_fill = (12, 12, 20, 210)  # ~82% opacity
-        card_border = (255, 255, 255, 40)
-        
-    card_draw.rounded_rectangle(
-        [card_x0, card_y0, card_x1, card_y1],
-        radius=35,
-        fill=card_fill,
-        outline=card_border,
-        width=2
-    )
-    
-    # Alpha composite the card onto the main background
-    image = Image.alpha_composite(image, card_overlay)
+        if slide_type == "cover":
+            # Still apply the bottom gradient overlay for consistency on fallback
+            gradient_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+            g_draw = ImageDraw.Draw(gradient_overlay)
+            start_y = 500
+            end_y = 1350
+            for y in range(start_y, end_y):
+                alpha = int(220 * (y - start_y) / (end_y - start_y))
+                g_draw.line([(0, y), (WIDTH, y)], fill=(10, 10, 15, alpha))
+            image = Image.alpha_composite(image, gradient_overlay)
+
     draw = ImageDraw.Draw(image)
     
-    # Key brand accent color (#FF6600)
-    key_color = (255, 102, 0, 255)
-    
-    # Bottom key color brand accent bar
+    # Bottom key color brand accent bar (drawn on all pages)
     draw.rectangle([80, HEIGHT - 35, WIDTH - 80, HEIGHT - 31], fill=key_color)
     
-    # Render slide page indicator inside the card (top-right corner)
-    page_num = slide.get("page", 1)
-    page_text = f"{page_num} / {total_pages}"
-    page_font = get_system_font(26)
-    draw.text((WIDTH - 180, 285), page_text, fill=(180, 180, 180, 220), font=page_font)
-    
     if slide_type == "cover":
-        # Draw cover top badge
-        draw.rounded_rectangle([130, 280, 440, 325], radius=15, fill=key_color)
-        badge_font = get_system_font(22)
-        draw.text((160, 290), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
+        # Cover Page Layout (No card, text drawn directly on bottom gradient)
         
-        # Draw Main Title (Bold) - use article title if available, truncated to 35 chars
+        # Render slide page indicator inside the cover area (top-right)
+        page_num = slide.get("page", 1)
+        page_text = f"{page_num} / {total_pages}"
+        page_font = get_system_font(26)
+        draw.text((WIDTH - 180, 285), page_text, fill=(180, 180, 180, 220), font=page_font)
+
+        # Draw cover top badge
+        draw.rounded_rectangle([80, 650, 390, 695], radius=15, fill=key_color)
+        badge_font = get_system_font(22)
+        draw.text((110, 660), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
+        
+        # Draw Main Title (Bold & Large)
         title_text = slide.get("main_text", hooking_title)
         if article_title and article_title.strip():
             clean_title = article_title.strip()
@@ -440,74 +434,103 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             else:
                 title_text = clean_title
                 
-        title_font = get_system_font(56)
-        lines = wrap_text(title_text, title_font, WIDTH - 260)
+        title_font = get_system_font(72)  # Increased size from 56 to 72
+        lines = wrap_text(title_text, title_font, WIDTH - 160) # Increased wrap width to 920
         
-        y_cursor = 380
+        y_cursor = 730
         for line in lines:
-            draw_text_safe(draw, (130, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=1)
-            y_cursor += 80
+            draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=1)
+            y_cursor += 95
             
-        # Draw teaser text at the bottom of the card
+        # Draw teaser text at the bottom
         teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
         teaser_font = get_system_font(26)
-        if hasattr(teaser_font, "getbbox"):
-            bbox = teaser_font.getbbox(teaser_text)
-            w = bbox[2] - bbox[0]
-        else:
-            w = len(teaser_text) * 13
-        x_pos = (WIDTH - w) // 2
-        draw.text((x_pos, HEIGHT - 300), teaser_text, fill=(230, 230, 235, 220), font=teaser_font)
+        draw.text((80, HEIGHT - 130), teaser_text, fill=key_color, font=teaser_font) # Placed at bottom left in key color
         
-    elif slide_type == "cta":
-        # Draw CTA page badge
-        draw.rounded_rectangle([130, 280, 320, 325], radius=15, fill=key_color)
-        badge_font = get_system_font(22)
-        draw.text((162, 290), "THANK YOU", fill=(255, 255, 255, 255), font=badge_font)
-        
-        content_font = get_system_font(48)
-        main_text = slide.get("main_text", "")
-        lines = wrap_text(main_text, content_font, WIDTH - 260)
-        
-        # Center text vertically inside the card body
-        line_height = 85
-        total_text_height = len(lines) * line_height
-        card_content_height = (HEIGHT - 220) - 360
-        y_cursor = 360 + (card_content_height - total_text_height) // 2
-        
-        for idx, line in enumerate(lines):
-            if hasattr(content_font, "getbbox"):
-                bbox = content_font.getbbox(line)
-                w = bbox[2] - bbox[0]
-            else:
-                w = len(line) * 24
-            x_pos = (WIDTH - w) // 2
-            
-            if idx == 0 or "마음에 들었다면" in line:
-                line_color = key_color
-            else:
-                line_color = (255, 255, 255, 255)
-                
-            draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=content_font)
-            y_cursor += line_height
-
     else:
-        # Standard Content Slide Layout
-        # Draw Key Point badge
-        badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-        draw.rounded_rectangle([130, 280, 360, 325], radius=15, fill=key_color)
-        badge_font = get_system_font(22)
-        draw.text((165, 290), badge_text, fill=(255, 255, 255, 255), font=badge_font)
+        # Define layout dimensions for content/CTA cards
+        card_x0, card_y0 = 80, 240
+        card_x1, card_y1 = WIDTH - 80, HEIGHT - 220
         
-        content_font = get_system_font(44)
-        main_text = slide.get("main_text", "")
-        lines = wrap_text(main_text, content_font, WIDTH - 260)
+        # Create card overlay layer for premium glassmorphism
+        card_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        card_draw = ImageDraw.Draw(card_overlay)
         
-        y_cursor = 380
-        for line in lines:
-            draw_text_safe(draw, (130, y_cursor), line, fill=(245, 245, 250, 255), font=content_font)
-            y_cursor += 75
+        # Choose card fill and border color based on slide type
+        if slide_type == "cta":
+            card_fill = (12, 12, 20, 215)  # Slightly higher opacity for final slide contrast
+            card_border = (255, 102, 0, 90)  # Subtle orange highlight border
+        else:
+            card_fill = (12, 12, 20, 210)  # ~82% opacity
+            card_border = (255, 255, 255, 40)
             
+        card_draw.rounded_rectangle(
+            [card_x0, card_y0, card_x1, card_y1],
+            radius=35,
+            fill=card_fill,
+            outline=card_border,
+            width=2
+        )
+        
+        # Alpha composite the card onto the main background
+        image = Image.alpha_composite(image, card_overlay)
+        draw = ImageDraw.Draw(image)
+        
+        # Render slide page indicator inside the card (top-right corner)
+        page_num = slide.get("page", 1)
+        page_text = f"{page_num} / {total_pages}"
+        page_font = get_system_font(26)
+        draw.text((WIDTH - 180, 285), page_text, fill=(180, 180, 180, 220), font=page_font)
+        
+        if slide_type == "cta":
+            # Draw CTA page badge
+            draw.rounded_rectangle([130, 280, 320, 325], radius=15, fill=key_color)
+            badge_font = get_system_font(22)
+            draw.text((162, 290), "THANK YOU", fill=(255, 255, 255, 255), font=badge_font)
+            
+            content_font = get_system_font(48)
+            main_text = slide.get("main_text", "")
+            lines = wrap_text(main_text, content_font, WIDTH - 260)
+            
+            # Center text vertically inside the card body
+            line_height = 85
+            total_text_height = len(lines) * line_height
+            card_content_height = (HEIGHT - 220) - 360
+            y_cursor = 360 + (card_content_height - total_text_height) // 2
+            
+            for idx, line in enumerate(lines):
+                if hasattr(content_font, "getbbox"):
+                    bbox = content_font.getbbox(line)
+                    w = bbox[2] - bbox[0]
+                else:
+                    w = len(line) * 24
+                x_pos = (WIDTH - w) // 2
+                
+                if idx == 0 or "마음에 들었다면" in line:
+                    line_color = key_color
+                else:
+                    line_color = (255, 255, 255, 255)
+                    
+                draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=content_font)
+                y_cursor += line_height
+
+        else:
+            # Standard Content Slide Layout
+            # Draw Key Point badge
+            badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
+            draw.rounded_rectangle([130, 280, 360, 325], radius=15, fill=key_color)
+            badge_font = get_system_font(22)
+            draw.text((165, 290), badge_text, fill=(255, 255, 255, 255), font=badge_font)
+            
+            content_font = get_system_font(44)
+            main_text = slide.get("main_text", "")
+            lines = wrap_text(main_text, content_font, WIDTH - 260)
+            
+            y_cursor = 380
+            for line in lines:
+                draw_text_safe(draw, (130, y_cursor), line, fill=(245, 245, 250, 255), font=content_font)
+                y_cursor += 75
+                
     # Apply logo watermark to the bottom right corner (outside the card)
     draw_logo_watermark(image)
     
