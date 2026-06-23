@@ -118,12 +118,17 @@ def get_emoji_font(size: int):
 
 def is_emoji(char: str) -> bool:
     ord_val = ord(char)
-    # Common emoji Unicode blocks
+    # Common emoji Unicode blocks & modifiers
     return (
         0x1F300 <= ord_val <= 0x1F9FF or
         0x1FA70 <= ord_val <= 0x1FAFF or
         0x2600 <= ord_val <= 0x27BF or
-        0x1F100 <= ord_val <= 0x1F1FF
+        0x1F100 <= ord_val <= 0x1F1FF or
+        # Zero Width Joiner & Variation selectors
+        ord_val == 0x200D or
+        0xFE00 <= ord_val <= 0xFE0F or
+        # Symbols, Arrows, and Geometric Shapes (e.g. ▶)
+        0x2500 <= ord_val <= 0x2BFF
     )
 
 def split_emojis(text: str) -> list:
