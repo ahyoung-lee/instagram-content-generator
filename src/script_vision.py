@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import urllib.parse
 from io import BytesIO
@@ -13,27 +14,80 @@ load_dotenv()
 WIDTH = 1080
 HEIGHT = 1350
 
-def get_system_font(size: int):
+def get_system_font(size: int, bold: bool = False):
     """
-    Attempts to load the bundled NanumGothic font first, then falls back to macOS/system fonts.
+    Attempts to load custom fonts placed in the folder first, then loads standard/system fonts.
     """
-    # 1. Prioritize local NanumGothic font for Korean character support on all OS
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    bundled_font_path = os.path.join(current_dir, "NanumGothic.ttf")
+    workspace_root = os.path.dirname(current_dir)
     
+    # 1. Scan for custom font files in the workspace root and src/ directory
+    custom_fonts = []
+    for directory in [workspace_root, current_dir]:
+        if os.path.exists(directory):
+            try:
+                for f in os.listdir(directory):
+                    f_lower = f.lower()
+                    # Only accept .ttf or .otf, exclude default bundled fonts to avoid loop
+                    if (f_lower.endswith('.ttf') or f_lower.endswith('.otf')) and f != "NanumGothic.ttf" and f != "seguiemj.ttf":
+                        custom_fonts.append(os.path.join(directory, f))
+            except Exception:
+                pass
+
+    if custom_fonts:
+        # If bold font requested, try to find a custom font with 'bold' or 'bd' in the filename
+        if bold:
+            bold_customs = [f for f in custom_fonts if "bold" in os.path.basename(f).lower() or "bd" in os.path.basename(f).lower()]
+            if bold_customs:
+                try:
+                    return ImageFont.truetype(bold_customs[0], size)
+                except Exception:
+                    pass
+        # Try to use the first custom font found
+        for f in custom_fonts:
+            try:
+                return ImageFont.truetype(f, size)
+            except Exception:
+                continue
+
+    # 2. If no custom font works, fallback to system fonts
     font_paths = []
-    if os.path.exists(bundled_font_path):
-        font_paths.append(bundled_font_path)
-        
-    # 2. System fallbacks
-    font_paths.extend([
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/System/Library/Fonts/AppleGothic.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/Library/Fonts/Arial.ttf",
-        "/System/Library/Fonts/Supplemental/AppleGothic.ttf"
-    ])
     
+    if bold:
+        # Prioritize Windows Malgun Gothic Bold or macOS Apple SD Gothic Neo Bold, etc.
+        font_paths.extend([
+            "C:\\Windows\\Fonts\\malgunbd.ttf",
+            "/System/Library/Fonts/AppleSDGothicNeo-Bold.otf",
+            "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+            "C:\\Windows\\Fonts\\malgun.ttf", # Fallback to malgun if no malgunbd
+        ])
+    else:
+        # Prioritize local NanumGothic font
+        bundled_font_path = os.path.join(current_dir, "NanumGothic.ttf")
+        if os.path.exists(bundled_font_path):
+            font_paths.append(bundled_font_path)
+            
+        font_paths.extend([
+            "C:\\Windows\\Fonts\\malgun.ttf",
+            "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/System/Library/Fonts/AppleGothic.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Supplemental/AppleGothic.ttf"
+        ])
+        
+    # If bold requested but no bold font succeeded, we will fallback to regular font paths
+    if bold:
+        bundled_font_path = os.path.join(current_dir, "NanumGothic.ttf")
+        if os.path.exists(bundled_font_path):
+            font_paths.append(bundled_font_path)
+        font_paths.extend([
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/System/Library/Fonts/AppleGothic.ttf",
+            "/System/Library/Fonts/Helvetica.ttc"
+        ])
+
     for path in font_paths:
         if os.path.exists(path):
             try:
@@ -94,7 +148,7 @@ def split_emojis(text: str) -> list:
         
     return segments
 
-def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, **kwargs):
+def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, stroke_fill=None, **kwargs):
     """
     Safely draws text. Detects emojis and draws them using system emoji fonts
     if available to avoid rendering tofu (blank squares).
@@ -103,10 +157,12 @@ def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, **kwargs):
     if hasattr(font, "size"):
         emoji_font = get_emoji_font(font.size)
         
+    s_fill = stroke_fill if stroke_fill is not None else fill
+
     if emoji_font is None:
         try:
             if stroke_width > 0:
-                draw.text(xy, text, fill=fill, font=font, stroke_width=stroke_width, stroke_fill=fill, **kwargs)
+                draw.text(xy, text, fill=fill, font=font, stroke_width=stroke_width, stroke_fill=s_fill, **kwargs)
             else:
                 draw.text(xy, text, fill=fill, font=font, **kwargs)
         except TypeError:
@@ -126,7 +182,7 @@ def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, **kwargs):
         current_font = emoji_font if is_seg_emoji else font
         try:
             if stroke_width > 0 and not is_seg_emoji:
-                draw.text((x, y), segment, fill=fill, font=current_font, stroke_width=stroke_width, stroke_fill=fill, **kwargs)
+                draw.text((x, y), segment, fill=fill, font=current_font, stroke_width=stroke_width, stroke_fill=s_fill, **kwargs)
             else:
                 draw.text((x, y), segment, fill=fill, font=current_font, **kwargs)
         except TypeError:
@@ -443,12 +499,13 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             else:
                 title_text = clean_title
                 
-        title_font = get_system_font(72)  # Increased size from 56 to 72
-        lines = wrap_text(title_text, title_font, WIDTH - 160) # Increased wrap width to 920
+        title_font = get_system_font(72, bold=True)  # Changed to bold=True
+        lines = wrap_text(title_text, title_font, WIDTH - 160)
         
         y_cursor = 730
         for line in lines:
-            draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=1)
+            # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
+            draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
             y_cursor += 95
             
         # Draw teaser text at the bottom
@@ -492,12 +549,28 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         draw.text((WIDTH - 180, 285), page_text, fill=(180, 180, 180, 220), font=page_font)
         
         if slide_type == "cta":
-            # Draw CTA page badge
-            draw.rounded_rectangle([130, 280, 320, 325], radius=15, fill=key_color)
-            badge_font = get_system_font(22)
-            draw.text((162, 290), "THANK YOU", fill=(255, 255, 255, 255), font=badge_font)
+            # Draw CTA page badge (Centered)
+            badge_text = "THANK YOU"
+            badge_font = get_system_font(22, bold=True)
+            if hasattr(badge_font, "getbbox"):
+                bbox = badge_font.getbbox(badge_text)
+                text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
+            else:
+                text_w = len(badge_text) * 11
+                text_h = 22
+            box_w = text_w + 60
+            x0 = (WIDTH - box_w) // 2
+            x1 = x0 + box_w
+            y0, y1 = 280, 325
+            
+            draw.rounded_rectangle([x0, y0, x1, y1], radius=15, fill=key_color)
+            text_x = x0 + (box_w - text_w) // 2
+            text_y = y0 + (y1 - y0 - text_h) // 2 - 2
+            draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
             
             content_font = get_system_font(48)
+            content_font_bold = get_system_font(48, bold=True)
             main_text = slide.get("main_text", "")
             lines = wrap_text(main_text, content_font, WIDTH - 260)
             
@@ -506,39 +579,78 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             total_text_height = len(lines) * line_height
             card_content_height = (HEIGHT - 220) - 360
             y_cursor = 360 + (card_content_height - total_text_height) // 2
-            
+            if y_cursor < 360:
+                y_cursor = 360
+                
             for idx, line in enumerate(lines):
-                if hasattr(content_font, "getbbox"):
-                    bbox = content_font.getbbox(line)
+                is_highlight = (idx == 0 or "마음에 들었다면" in line)
+                current_font = content_font_bold if is_highlight else content_font
+                line_color = key_color if is_highlight else (255, 255, 255, 255)
+                
+                if hasattr(current_font, "getbbox"):
+                    bbox = current_font.getbbox(line)
                     w = bbox[2] - bbox[0]
                 else:
                     w = len(line) * 24
                 x_pos = (WIDTH - w) // 2
                 
-                if idx == 0 or "마음에 들었다면" in line:
-                    line_color = key_color
-                else:
-                    line_color = (255, 255, 255, 255)
-                    
-                draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=content_font)
+                draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=current_font)
                 y_cursor += line_height
 
         else:
             # Standard Content Slide Layout
-            # Draw Key Point badge
+            # Draw Key Point badge (Centered)
             badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-            draw.rounded_rectangle([130, 280, 360, 325], radius=15, fill=key_color)
-            badge_font = get_system_font(22)
-            draw.text((165, 290), badge_text, fill=(255, 255, 255, 255), font=badge_font)
+            badge_font = get_system_font(22, bold=True)
+            if hasattr(badge_font, "getbbox"):
+                bbox = badge_font.getbbox(badge_text)
+                text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
+            else:
+                text_w = len(badge_text) * 11
+                text_h = 22
+            box_w = text_w + 60
+            x0 = (WIDTH - box_w) // 2
+            x1 = x0 + box_w
+            y0, y1 = 280, 325
+            
+            draw.rounded_rectangle([x0, y0, x1, y1], radius=15, fill=key_color)
+            text_x = x0 + (box_w - text_w) // 2
+            text_y = y0 + (y1 - y0 - text_h) // 2 - 2
+            draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
             
             content_font = get_system_font(44)
+            content_font_bold = get_system_font(44, bold=True)
             main_text = slide.get("main_text", "")
             lines = wrap_text(main_text, content_font, WIDTH - 260)
             
-            y_cursor = 380
+            # Center text vertically inside the card body
+            line_height = 75
+            total_text_height = len(lines) * line_height
+            card_content_height = (HEIGHT - 220) - 360 # 770 px
+            y_cursor = 360 + (card_content_height - total_text_height) // 2
+            if y_cursor < 360:
+                y_cursor = 360
+                
             for line in lines:
-                draw_text_safe(draw, (130, y_cursor), line, fill=(245, 245, 250, 255), font=content_font)
-                y_cursor += 75
+                # Check if this line is a header (like "1. xxx", "첫째", "1단계")
+                is_header = False
+                cleaned = line.strip()
+                if re.match(r'^\d+\.', cleaned) or re.match(r'^\d+단계', cleaned) or cleaned.startswith(("첫째", "둘째", "셋째", "넷째", "다섯째", "마지막")):
+                    is_header = True
+                
+                current_font = content_font_bold if is_header else content_font
+                line_color = key_color if is_header else (245, 245, 250, 255)
+                
+                if hasattr(current_font, "getbbox"):
+                    bbox = current_font.getbbox(line)
+                    w = bbox[2] - bbox[0]
+                else:
+                    w = len(line) * 22
+                x_pos = (WIDTH - w) // 2
+                
+                draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=current_font)
+                y_cursor += line_height
                 
     # Apply logo watermark to the bottom right corner (outside the card)
     draw_logo_watermark(image)
