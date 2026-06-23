@@ -32,6 +32,15 @@ class PublishRequest(BaseModel):
     caption: str
     date_str: str
 
+class UpdateTitleRequest(BaseModel):
+    date_str: str
+    title: str
+
+class PrepareDownloadRequest(BaseModel):
+    date_str: str
+    caption: str
+    title: str
+
 # Define Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAVE_DIR = os.path.join(BASE_DIR, "save")
@@ -83,6 +92,12 @@ def api_generate(payload: GenerateRequest):
             filename = os.path.basename(file_path)
             relative_image_urls.append(f"/save/{date_str}/{url_hash}/{filename}")
             
+        # Automatically save caption file and create ZIP archive
+        from src.script_instagram import save_caption_file, create_zip_archive
+        caption_path = save_caption_file(plan.get("final_caption", ""), post_dir)
+        zip_path = create_zip_archive(generated_files, caption_path, post_dir)
+        relative_zip_url = f"/save/{date_str}/{url_hash}/{os.path.basename(zip_path)}"
+            
         # Save to plan.json cache
         cache_content = {
             "requested_url": payload.url,
@@ -90,7 +105,8 @@ def api_generate(payload: GenerateRequest):
             "url": scraped_url,
             "plan": plan,
             "image_urls": relative_image_urls,
-            "absolute_paths": generated_files
+            "absolute_paths": generated_files,
+            "zip_url": relative_zip_url
         }
         try:
             with open(plan_file, "w", encoding="utf-8") as f:
@@ -106,7 +122,8 @@ def api_generate(payload: GenerateRequest):
             "plan": plan,
             "image_urls": relative_image_urls,
             "date_str": f"{date_str}/{url_hash}",
-            "absolute_paths": generated_files
+            "absolute_paths": generated_files,
+            "zip_url": relative_zip_url
         }
         
     except Exception as e:
@@ -163,6 +180,104 @@ def api_publish(payload: PublishRequest):
     except Exception as e:
         import traceback
         print(f"Publishing error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/api/update_title")
+def api_update_title(payload: UpdateTitleRequest):
+    try:
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        plan_file = os.path.join(post_dir, "plan.json")
+        
+        if not os.path.exists(plan_file):
+            raise HTTPException(status_code=404, detail="Plan file not found")
+            
+        with open(plan_file, "r", encoding="utf-8") as f:
+            plan_data = json.load(f)
+            
+        # Update fields
+        plan_data["title"] = payload.title
+        # Also update the title in the first slide if it is a cover slide
+        if plan_data.get("plan", {}).get("slides"):
+            plan_data["plan"]["slides"][0]["main_text"] = payload.title
+            
+        # Write updated plan back to cache
+        with open(plan_file, "w", encoding="utf-8") as f:
+            json.dump(plan_data, f, ensure_ascii=False, indent=4)
+            
+        # Re-render Pillow images
+        # Since background_master.png exists, it will reuse it (reuse_background=True)
+        generated_files = generate_carousel_images(
+            plan_data["plan"], 
+            post_dir, 
+            reuse_background=True, 
+            article_title=payload.title
+        )
+        
+        relative_image_urls = []
+        for file_path in generated_files:
+            filename = os.path.basename(file_path)
+            relative_image_urls.append(f"/save/{payload.date_str}/{filename}")
+            
+        # Update caption.txt and zip archive too
+        from src.script_instagram import save_caption_file, create_zip_archive
+        caption_path = save_caption_file(plan_data["plan"].get("final_caption", ""), post_dir)
+        zip_path = create_zip_archive(generated_files, caption_path, post_dir)
+        relative_zip_url = f"/save/{payload.date_str}/{os.path.basename(zip_path)}"
+        
+        return {
+            "success": True,
+            "image_urls": relative_image_urls,
+            "zip_url": relative_zip_url,
+            "absolute_paths": generated_files
+        }
+    except Exception as e:
+        import traceback
+        print(f"Update title error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/prepare_download")
+def api_prepare_download(payload: PrepareDownloadRequest):
+    try:
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        plan_file = os.path.join(post_dir, "plan.json")
+        
+        if not os.path.exists(plan_file):
+            raise HTTPException(status_code=404, detail="Plan file not found")
+            
+        with open(plan_file, "r", encoding="utf-8") as f:
+            plan_data = json.load(f)
+            
+        # Update title & caption in memory and cache
+        plan_data["title"] = payload.title
+        if plan_data.get("plan", {}).get("slides"):
+            plan_data["plan"]["slides"][0]["main_text"] = payload.title
+        plan_data["plan"]["final_caption"] = payload.caption
+        
+        with open(plan_file, "w", encoding="utf-8") as f:
+            json.dump(plan_data, f, ensure_ascii=False, indent=4)
+            
+        # Re-render Pillow images
+        generated_files = generate_carousel_images(
+            plan_data["plan"], 
+            post_dir, 
+            reuse_background=True, 
+            article_title=payload.title
+        )
+        
+        # Save sufficed/edited caption
+        from src.script_instagram import save_caption_file, create_zip_archive
+        caption_path = save_caption_file(payload.caption, post_dir)
+        
+        # Create ZIP containing updated files
+        zip_path = create_zip_archive(generated_files, caption_path, post_dir)
+        relative_zip_url = f"/save/{payload.date_str}/{os.path.basename(zip_path)}"
+        
+        return {
+            "success": True,
+            "zip_url": relative_zip_url
+        }
+    except Exception as e:
+        import traceback
+        print(f"Prepare download error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Mount save directory to serve generated images

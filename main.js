@@ -3,7 +3,8 @@ let currentPostData = {
     image_paths: [],
     caption: '',
     date_str: '',
-    zip_url: ''
+    zip_url: '',
+    title: ''
 };
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
@@ -62,11 +63,40 @@ const dateBadge = document.getElementById('date-badge');
 const slidesGrid = document.getElementById('slides-grid');
 const captionText = document.getElementById('caption-text');
 const copyCaptionBtn = document.getElementById('copy-caption-btn');
-const publishBtn = document.getElementById('publish-btn');
-const statusBox = document.getElementById('status-box');
-const statusLog = document.getElementById('status-log');
-const fallbackActions = document.getElementById('fallback-actions');
-const downloadZipBtn = document.getElementById('download-zip-btn');
+const titleEditInput = document.getElementById('title-edit-input');
+const updateTitleBtn = document.getElementById('update-title-btn');
+const saveBtn = document.getElementById('save-btn');
+
+// Helper to render slides in grid
+function renderSlidesPreview(imageUrls) {
+    slidesGrid.innerHTML = '';
+    imageUrls.forEach((url, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'slide-preview-wrapper';
+        wrapper.style.cursor = 'pointer';
+        
+        const img = document.createElement('img');
+        img.src = url + '?t=' + Date.now();
+        img.alt = `Slide ${index + 1}`;
+        
+        const badge = document.createElement('div');
+        badge.className = 'slide-number';
+        badge.textContent = index + 1;
+        
+        wrapper.appendChild(img);
+        wrapper.appendChild(badge);
+        
+        // Click to open preview modal
+        wrapper.addEventListener('click', () => {
+            const modal = document.getElementById('image-modal');
+            const modalImg = document.getElementById('modal-img');
+            modal.classList.remove('hidden');
+            modalImg.src = url + '?t=' + Date.now();
+        });
+        
+        slidesGrid.appendChild(wrapper);
+    });
+}
 
 // 1. Generate Content
 generateBtn.addEventListener('click', async () => {
@@ -75,8 +105,6 @@ generateBtn.addEventListener('click', async () => {
     // Show Loading Overlay
     loadingOverlay.classList.remove('hidden');
     resultsSection.classList.add('hidden');
-    statusBox.classList.add('hidden');
-    fallbackActions.classList.add('hidden');
 
     try {
         const response = await fetch('/api/generate', {
@@ -98,44 +126,20 @@ generateBtn.addEventListener('click', async () => {
             currentPostData.image_paths = data.absolute_paths;
             currentPostData.caption = data.plan.final_caption;
             currentPostData.date_str = data.date_str;
-            
-            // Format ZIP URL (assuming zip is created under save/YYYY-MM-DD/)
-            // We'll update the download button link with this relative path
+            currentPostData.zip_url = data.zip_url;
+            currentPostData.title = data.title;
             
             // Populate UI Elements
-            dateBadge.textContent = data.date_str;
+            dateBadge.textContent = data.date_str.split('/')[0];
             captionText.value = data.plan.final_caption;
             captionText.readOnly = false;
             captionText.removeAttribute('readonly');
             
+            // Set cover title input
+            titleEditInput.value = data.title;
+            
             // Render Slide Images Preview
-            slidesGrid.innerHTML = '';
-            data.image_urls.forEach((url, index) => {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'slide-preview-wrapper';
-                wrapper.style.cursor = 'pointer';
-                
-                const img = document.createElement('img');
-                img.src = url + '?t=' + Date.now();
-                img.alt = `Slide ${index + 1}`;
-                
-                const badge = document.createElement('div');
-                badge.className = 'slide-number';
-                badge.textContent = index + 1;
-                
-                wrapper.appendChild(img);
-                wrapper.appendChild(badge);
-                
-                // Click to open preview modal
-                wrapper.addEventListener('click', () => {
-                    const modal = document.getElementById('image-modal');
-                    const modalImg = document.getElementById('modal-img');
-                    modal.classList.remove('hidden');
-                    modalImg.src = url + '?t=' + Date.now();
-                });
-                
-                slidesGrid.appendChild(wrapper);
-            });
+            renderSlidesPreview(data.image_urls);
             
             // Show Results
             resultsSection.classList.remove('hidden');
@@ -175,57 +179,112 @@ copyCaptionBtn.addEventListener('click', () => {
         });
 });
 
-// 3. Publish to Instagram
-publishBtn.addEventListener('click', async () => {
-    // Disable button to prevent double submission
-    publishBtn.disabled = true;
-    publishBtn.textContent = '⏳ 발행 요청 중...';
-    
-    statusBox.classList.remove('hidden');
-    statusLog.textContent = 'Meta Graph API 파이프라인 가동 시작...\n';
-    fallbackActions.classList.add('hidden');
+// 3. Update Slide Title
+updateTitleBtn.addEventListener('click', async () => {
+    const newTitle = titleEditInput.value.trim();
+    if (!newTitle) {
+        alert('첫 번째 이미지에 적용할 제목을 입력해 주세요.');
+        return;
+    }
+
+    if (!currentPostData.date_str) {
+        alert('변경할 콘텐츠가 존재하지 않습니다. 먼저 생성해 주세요.');
+        return;
+    }
+
+    loadingOverlay.classList.remove('hidden');
 
     try {
-        const response = await fetch('/api/publish', {
+        const response = await fetch('/api/update_title', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                image_paths: currentPostData.image_paths,
-                caption: captionText.value, // Read edited caption directly from textarea
-                date_str: currentPostData.date_str
+                date_str: currentPostData.date_str,
+                title: newTitle
             })
         });
 
+        if (!response.ok) {
+            throw new Error(`제목 수정 중 서버 에러 발생 (상태 코드: ${response.status})`);
+        }
+
         const data = await response.json();
-        
-        statusLog.textContent += data.log + '\n';
-        
-        if (response.ok && data.success) {
-            statusLog.textContent += `🎉 게시 완료! 포스트 ID: ${data.post_id}\n`;
-            alert('인스타그램 발행에 성공했습니다!');
-            publishBtn.textContent = '🚀 Instagram에 즉시 발행';
-            publishBtn.disabled = false;
+
+        if (data.success) {
+            currentPostData.zip_url = data.zip_url;
+            currentPostData.title = newTitle;
+            currentPostData.image_paths = data.absolute_paths;
+
+            // Render Slide Images Preview
+            renderSlidesPreview(data.image_urls);
+            
+            alert('표지 제목이 성공적으로 변경되었습니다!');
         } else {
-            statusLog.textContent += `❌ 발행 실패: ${data.error || '알 수 없는 오류'}\n`;
-            
-            // Set up fallback download ZIP link
-            if (data.zip_path) {
-                downloadZipBtn.href = '/' + data.zip_path;
-                fallbackActions.classList.remove('hidden');
-            }
-            
-            alert('인스타그램 발행에 실패했습니다. 수동 다운로드 및 캡션 복사 기능을 활성화합니다.');
-            publishBtn.textContent = '🚀 Instagram에 즉시 발행';
-            publishBtn.disabled = false;
+            alert(`제목 변경 실패: ${data.error || '알 수 없는 오류'}`);
         }
     } catch (error) {
         console.error(error);
-        statusLog.textContent += `❌ 오류 발생: ${error.message}\n`;
-        alert('요청 중 문제가 발생했습니다. 로그를 확인해 주세요.');
-        publishBtn.textContent = '🚀 Instagram에 즉시 발행';
-        publishBtn.disabled = false;
+        alert(`요청 처리 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
+});
+
+// 4. Save/Download Zip Package
+saveBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+
+    if (!currentPostData.date_str) {
+        alert('저장할 콘텐츠가 없습니다. 먼저 콘텐츠를 생성해 주세요.');
+        return;
+    }
+
+    saveBtn.style.pointerEvents = 'none';
+    saveBtn.style.opacity = '0.6';
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '⏳ 다운로드 준비 중...';
+
+    try {
+        const response = await fetch('/api/prepare_download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                date_str: currentPostData.date_str,
+                title: titleEditInput.value.trim(),
+                caption: captionText.value
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`서버 에러 발생 (상태 코드: ${response.status})`);
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            currentPostData.zip_url = data.zip_url;
+
+            // Create temporary link to trigger download
+            const tempLink = document.createElement('a');
+            tempLink.href = data.zip_url;
+            tempLink.download = data.zip_url.split('/').pop();
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
+        } else {
+            alert(`이미지 저장 실패: ${data.error || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`다운로드 중 문제가 발생했습니다: ${error.message}`);
+    } finally {
+        saveBtn.style.pointerEvents = 'auto';
+        saveBtn.style.opacity = '1';
+        saveBtn.innerHTML = originalText;
     }
 });
 

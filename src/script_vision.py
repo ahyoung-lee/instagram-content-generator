@@ -260,9 +260,9 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
     except Exception as e:
         print(f"Failed to draw logo watermark: {e}")
 
-def generate_dalle_background(hooking_title: str) -> Image.Image:
+def generate_dalle_background(prompt_text: str) -> Image.Image:
     """
-    Calls OpenAI Image API to generate a background image based on the hooking title.
+    Calls OpenAI Image API to generate a background image based on the provided prompt_text.
     Returns a PIL Image object, or None if generation fails.
     """
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -271,18 +271,27 @@ def generate_dalle_background(hooking_title: str) -> Image.Image:
         return None
 
     try:
-        print(f"Generating AI background via OpenAI for: '{hooking_title}'...")
+        print(f"Generating AI background via OpenAI for: '{prompt_text[:50]}...'")
         client = OpenAI(api_key=openai_key)
         
         # Optimize prompt to generate a highly intuitive, direct visual concept matching the title keywords
-        prompt = (
-            f"A highly intuitive, clear, and direct visual concept representing the key subject of: '{hooking_title}'. "
-            "This is a background for an Instagram post, so it must feature a central, iconic symbol or metaphor matching the keywords. "
-            "For example: if 'Apple' (애플) or 'Siri' (시리) is mentioned, draw a clean iconic Apple logo or a glowing intelligent virtual assistant sphere. If 'robot' or 'AI' is mentioned, draw a sleek futuristic robot or digital brain. "
-            "The image must be simple, centered, visually striking, with a clean and professional layout. "
-            "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces. "
-            "Modern premium digital illustration, with a clean color scheme matching the subject."
-        )
+        is_english = prompt_text and any(c.isalpha() for c in prompt_text) and not any(ord(c) > 127 for c in prompt_text)
+        
+        if is_english:
+            prompt = (
+                f"{prompt_text}. "
+                "Premium high-quality visual aesthetics, center-focused composition, clean, minimalist and sophisticated. "
+                "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces, NO signatures, NO watermarks. "
+                "Suitable for a clean, modern Instagram card news background."
+            )
+        else:
+            prompt = (
+                f"A highly intuitive, clear, and direct visual concept representing the key subject of: '{prompt_text}'. "
+                "This is a background for an Instagram post, so it must feature a central, iconic symbol or metaphor matching the keywords. "
+                "The image must be simple, centered, visually striking, with a clean and professional layout. "
+                "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces. "
+                "Modern premium digital illustration, with a clean color scheme matching the subject."
+            )
         
         try:
             # Try gpt-image-1-mini first (supported on this API key)
@@ -544,6 +553,7 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     os.makedirs(output_dir, exist_ok=True)
     total_pages = plan.get("total_pages", 4)
     hooking_title = plan.get("hooking_title", "Trending")
+    image_prompt = plan.get("image_prompt", hooking_title)
     slides = plan.get("slides", [])
     
     master_bg_path = os.path.join(output_dir, "background_master.png")
@@ -559,8 +569,8 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
             bg_image = None
             
     if bg_image is None:
-        # Generate DALL-E master background
-        raw_bg = generate_dalle_background(hooking_title)
+        # Generate DALL-E master background using the detailed image_prompt
+        raw_bg = generate_dalle_background(image_prompt)
         if raw_bg is not None:
             bg_image = resize_to_cover(raw_bg, WIDTH, HEIGHT)
             try:

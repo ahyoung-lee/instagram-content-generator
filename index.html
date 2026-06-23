@@ -49,6 +49,14 @@
                     </div>
                 </div>
 
+                <div class="title-edit-container">
+                    <h4>첫 번째 이미지 제목 수정</h4>
+                    <div class="title-edit-bar">
+                        <input type="text" id="title-edit-input" placeholder="첫 번째 슬라이드의 제목을 입력하세요." aria-label="제목 수정">
+                        <button id="update-title-btn" class="btn-secondary">변경하기</button>
+                    </div>
+                </div>
+
                 <div class="caption-container">
                     <h4>수익화 본문 캡션 및 해시태그</h4>
                     <textarea id="caption-text" placeholder="생성된 캡션 내용이 여기에 표시되며, 자유롭게 수정할 수 있습니다."></textarea>
@@ -58,19 +66,7 @@
                 </div>
 
                 <div class="publish-section">
-                    <button id="publish-btn" class="btn-accent">🚀 Instagram에 즉시 발행</button>
-                </div>
-
-                <!-- API Response Log & Fallback Buttons -->
-                <div id="status-box" class="status-box hidden">
-                    <h4 id="status-title">상태 로그</h4>
-                    <pre id="status-log"></pre>
-                    <div id="fallback-actions" class="fallback-actions hidden">
-                        <p class="warning-text">⚠️ 자동 발행에 실패했거나 로컬 환경인 경우, 아래 버튼을 눌러 수동으로 게시하세요!</p>
-                        <div class="action-buttons">
-                            <a id="download-zip-btn" href="#" class="btn-download" download>📦 이미지 & 캡션 압축 파일 다운로드</a>
-                        </div>
-                    </div>
+                    <a id="save-btn" href="#" class="btn-accent" download style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">📦 이미지 저장</a>
                 </div>
             </section>
         </main>
