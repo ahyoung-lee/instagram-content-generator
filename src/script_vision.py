@@ -100,14 +100,22 @@ def get_system_font(size: int, bold: bool = False):
 def get_emoji_font(size: int):
     """
     Attempts to locate standard system emoji fonts for Windows, macOS, or Linux.
+    Prioritizes the bundled NotoColorEmoji.ttf font if available.
     """
-    paths = [
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    bundled_path = os.path.join(current_dir, "NotoColorEmoji.ttf")
+    
+    paths = []
+    if os.path.exists(bundled_path):
+        paths.append(bundled_path)
+        
+    paths.extend([
         "C:\\Windows\\Fonts\\seguiemj.ttf",  # Windows standard emoji font
         "/System/Library/Fonts/Apple Color Emoji.ttc",  # macOS standard
         "/System/Library/Fonts/Apple Color Emoji.ttf",
         "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",  # Linux Noto Emoji
         "/usr/share/fonts/truetype/emoji/NotoColorEmoji.ttf"
-    ]
+    ])
     for path in paths:
         if os.path.exists(path):
             try:

@@ -62,6 +62,7 @@ def api_generate(payload: GenerateRequest):
         
         # Check if cache exists and matches the requested URL for background image reuse
         reuse_background = False
+        request_count = 1
         if os.path.exists(plan_file):
             try:
                 with open(plan_file, "r", encoding="utf-8") as f:
@@ -69,8 +70,16 @@ def api_generate(payload: GenerateRequest):
                 
                 cached_req_url = cached_data.get("requested_url")
                 if cached_req_url == payload.url:
-                    reuse_background = True
-                    print(f"Same URL requested on the same day. Will reuse background image.")
+                    prev_count = cached_data.get("request_count", 1)
+                    request_count = prev_count + 1
+                    
+                    # If request_count is even (2nd, 4th, etc. request), reuse the background image
+                    if request_count % 2 == 0:
+                        reuse_background = True
+                        print(f"Same URL requested (count {request_count}). Will reuse background image.")
+                    else:
+                        reuse_background = False
+                        print(f"Same URL requested (count {request_count}). Generating a NEW background image.")
             except Exception as cache_err:
                 print(f"Error reading cache plan.json for background check: {cache_err}")
 
@@ -101,6 +110,7 @@ def api_generate(payload: GenerateRequest):
         # Save to plan.json cache
         cache_content = {
             "requested_url": payload.url,
+            "request_count": request_count,
             "title": title,
             "url": scraped_url,
             "plan": plan,
