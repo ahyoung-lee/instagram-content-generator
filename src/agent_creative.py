@@ -40,7 +40,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
                 "main_text": "이 정보가 마음에 들었다면\n좋아요♥ 부탁드립니다\n감사합니다 ^_^"
             }
         ],
-        "final_caption": "🔥 AI로 인스타그램 자동화 시작하기!\n\n매일 무슨 콘텐츠 올릴지 고민되셨나요?\n이제 AI 에이전트 시스템이 실시간 트렌드를 읽어와 최적화된 카드뉴스와 해시태그까지 자동으로 만들어 드립니다!\n\n시간은 절약하고, 수익은 극대화하는 비결이 궁금하다면?\n지금 바로 프로필 링크를 확인해 보세요! 👇\n\n#인스타그램자동화 #인스타마케팅 #부업추천 #AI마케팅 #alwaysg00d",
+        "final_caption": "🔥 AI로 인스타그램 자동화 시작하기!\n\n매일 무슨 콘텐츠 올릴지 고민되셨나요?\n이제 AI 에이전트 시스템이 실시간 트렌드를 읽어와 최적화된 카드뉴스와 해시태그까지 자동으로 만들어 드립니다!\n\n시간은 절약하고, 수익은 극대화하는 비결이 궁금하다면?\n지금 바로 프로필 링크를 확인해 보세요! 👇\n\n#인스타그램자동화 #인스타마케팅 #부업추천 #AI마케팅 #콘텐츠제작",
         "image_prompt": "A modern premium digital illustration of a sleek glowing artificial intelligence robot head, side profile, centered, minimalist dark studio background, cinematic lighting, gold and blue accents."
     }
 
@@ -68,7 +68,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
 좋아요♥ 부탁드립니다
 감사합니다 ^_^
 7. 동일한 기사 링크로 여러 번 요청될 수 있으니, 매번 텍스트 생성 시 이전 버전과 다른 깊이 있는 분석 각도나 새로운 유용한 디테일을 찾아 독창적이고 심도 있게 작성해줘.
-8. `final_caption`에는 풍부하고 유용한 정보성 본문 텍스트를 작성하고, 마지막에 관련 해시태그는 뉴스 기사의 핵심 키워드를 반영한 대표적인 해시태그 딱 5개(반드시 '#alwaysg00d' 포함)만 공백으로 구분해서 한 줄에 적어줘. 절대 5개를 초과하거나 미달하지 않도록 정확히 5개의 해시태그로 작성해줘.
+8. `final_caption`에는 풍부하고 유용한 정보성 본문 텍스트를 작성하고, 마지막에 관련 해시태그는 뉴스 기사의 핵심 키워드를 반영한 대표적인 해시태그 딱 5개만 공백으로 구분해서 한 줄에 적어줘. 절대 5개를 초과하거나 미달하지 않도록 정확히 5개의 해시태그로 작성해줘.
 9. (매우 중요) 두 번째 카드뉴스 슬라이드부터는 문장 곳곳에 이모지를 다채롭게 배치하여, 스마트폰으로 보는 독자들이 한눈에 직관적으로 이해하고 쉽게 읽을 수 있도록 써야 해.
 10. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 DALL-E 이미지용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 전체적인 배경 이미지로 사용될 것이므로, 절대 텍스트(글자), 워터마크, 서명, 지저분한 패턴, 세부 얼굴 묘사 등은 제외하고, 중심이 되는 주요 상징 오브젝트(예: 로봇, 뇌, 스마트폰, 돈, 차트 등)가 입체적이고 고급스럽게 묘사된 3D 렌더링 혹은 미래지향적인 프리미엄 일러스트 스타일로 작성해줘. 배경은 어둡고 깔끔한 스튜디오 조명 느낌을 권장해. (예시: "A premium 3D render of a futuristic glowing brain icon, cybernetic lines, centered on a clean dark gradient background, cinematic lighting, gold and blue highlights")
 
@@ -87,7 +87,7 @@ JSON 스키마:
     {{"page": 6, "type": "content", "main_text": "5. 시리 통합 🤖\\n상세 정보 및 예시 💡"}},
     {{"page": 7, "type": "cta", "main_text": "이 정보가 마음에 들었다면\\n좋아요♥ 부탁드립니다\\n감사합니다 ^_^"}}
   ],
-  "final_caption": "인스타그램 업로드용 전체 본문 텍스트 및 CTA 구문... \\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4 #alwaysg00d",
+  "final_caption": "인스타그램 업로드용 전체 본문 텍스트 및 CTA 구문... \\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4 #해시태그5",
   "image_prompt": "A premium detailed English prompt for DALL-E based on the selected keywords"
 }}
 """
@@ -147,7 +147,7 @@ JSON 스키마:
         fallback_copy["slides"][0]["main_text"] = f"화제의 이슈!\n{article_title[:15]}\n핵심 요약 정리"
         fallback_copy["slides"][1]["main_text"] = f"기사 본문 내용 요약:\n{article_content[:50]}..."
         fallback_copy["slides"][2]["main_text"] = "트렌드 변화 속에서\n우리가 준비해야 할\n비즈니스 기회는 무엇일까요?"
-        fallback_copy["final_caption"] = f"📢 화제의 이슈 소식 안내\n\n{article_title}\n\n상세한 트렌드 분석과 비즈니스 활용 팁은 프로필 링크에서 만나보세요! 👇\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석 #alwaysg00d"
+        fallback_copy["final_caption"] = f"📢 화제의 이슈 소식 안내\n\n{article_title}\n\n상세한 트렌드 분석과 비즈니스 활용 팁은 프로필 링크에서 만나보세요! 👇\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석 #핫토픽"
         fallback_copy["image_prompt"] = f"A premium 3D digital illustration representing {article_title[:20]}, dark clean background, sleek glowing design, neon lighting, cinematic rendering."
         return fallback_copy
 
