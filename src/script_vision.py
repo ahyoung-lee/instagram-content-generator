@@ -607,7 +607,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 y_cursor = 360
                 
             for idx, line in enumerate(lines):
-                is_highlight = (idx == 0 or "마음에 들었다면" in line)
+                is_highlight = (idx == 0 or "마음에 들었다면" in line or "공유해보세요" in line)
                 current_font = content_font_bold if is_highlight else content_font
                 line_color = key_color if is_highlight else (255, 255, 255, 255)
                 
