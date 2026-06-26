@@ -523,14 +523,16 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             else:
                 title_text = clean_title
                 
-        title_font = get_system_font(72, bold=True)  # Changed to bold=True
+        title_font = get_system_font(84, bold=True)  # Increased from 72 to 84 for larger text
         lines = wrap_text(title_text, title_font, WIDTH - 160)
         
         y_cursor = 730
         for line in lines:
+            # Draw a subtle drop shadow (semi-transparent dark gray) at (3, 3) offset
+            draw_text_safe(draw, (80 + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
             # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
             draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
-            y_cursor += 95
+            y_cursor += 110  # Increased from 95 to 110 to match the 84 font size
             
         # Draw teaser text at the bottom
         teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
