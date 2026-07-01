@@ -172,6 +172,17 @@ def split_emojis(text: str) -> list:
         
     return segments
 
+def format_korean_line_breaks(text: str) -> str:
+    """
+    Applies custom line break rules for Korean readability.
+    Inserts a newline after specified particles, connectives, commas, exclamation marks, or question marks followed by space.
+    """
+    if not text:
+        return text
+    # Match '와', '과', ',', '를', '을', '하고', '되고', '!', '?' followed by one or more spaces/tabs
+    pattern = r'(와|과|,|를|을|하고|되고|!|\?)([ \t]+)'
+    return re.sub(pattern, r'\1\n', text)
+
 def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, stroke_fill=None, **kwargs):
     """
     Safely draws text. Detects emojis and draws them using system emoji fonts
@@ -595,13 +606,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             text_y = y0 + (y1 - y0 - text_h) // 2 - 2
             draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
             
-            content_font = get_system_font(48)
-            content_font_bold = get_system_font(48, bold=True)
+            content_font_bold = get_system_font(56, bold=True)
             main_text = slide.get("main_text", "")
-            lines = wrap_text(main_text, content_font, WIDTH - 260)
+            lines = wrap_text(main_text, content_font_bold, WIDTH - 260)
             
             # Center text vertically inside the card body
-            line_height = 85
+            line_height = 98
             total_text_height = len(lines) * line_height
             card_content_height = (HEIGHT - 220) - 360
             y_cursor = 360 + (card_content_height - total_text_height) // 2
@@ -609,18 +619,15 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 y_cursor = 360
                 
             for idx, line in enumerate(lines):
-                is_highlight = (idx == 0 or "마음에 들었다면" in line or "공유해보세요" in line)
-                current_font = content_font_bold if is_highlight else content_font
-                line_color = key_color if is_highlight else (255, 255, 255, 255)
-                
-                if hasattr(current_font, "getbbox"):
-                    bbox = current_font.getbbox(line)
+                if hasattr(content_font_bold, "getbbox"):
+                    bbox = content_font_bold.getbbox(line)
                     w = bbox[2] - bbox[0]
                 else:
-                    w = len(line) * 24
+                    w = len(line) * 28
                 x_pos = (WIDTH - w) // 2
                 
-                draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=current_font)
+                # Make the text bold and key color
+                draw_text_safe(draw, (x_pos, y_cursor), line, fill=key_color, font=content_font_bold)
                 y_cursor += line_height
 
         else:
@@ -645,13 +652,14 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             text_y = y0 + (y1 - y0 - text_h) // 2 - 2
             draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
             
-            content_font = get_system_font(44)
-            content_font_bold = get_system_font(44, bold=True)
+            content_font = get_system_font(52)
+            content_font_bold = get_system_font(52, bold=True)
             main_text = slide.get("main_text", "")
+            main_text = format_korean_line_breaks(main_text)
             lines = wrap_text(main_text, content_font, WIDTH - 260)
             
             # Center text vertically inside the card body
-            line_height = 75
+            line_height = 88
             total_text_height = len(lines) * line_height
             card_content_height = (HEIGHT - 220) - 360 # 770 px
             y_cursor = 360 + (card_content_height - total_text_height) // 2
@@ -663,7 +671,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 is_header = False
                 cleaned = line.strip()
                 if re.match(r'^\d+\.', cleaned) or re.match(r'^\d+단계', cleaned) or cleaned.startswith(("첫째", "둘째", "셋째", "넷째", "다섯째", "마지막")):
-                    is_header = True
+                     is_header = True
                 
                 current_font = content_font_bold if is_header else content_font
                 line_color = key_color if is_header else (245, 245, 250, 255)
@@ -672,7 +680,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                     bbox = current_font.getbbox(line)
                     w = bbox[2] - bbox[0]
                 else:
-                    w = len(line) * 22
+                    w = len(line) * 26
                 x_pos = (WIDTH - w) // 2
                 
                 draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=current_font)
@@ -739,8 +747,8 @@ if __name__ == "__main__":
         "hooking_title": "테스트 카드뉴스",
         "slides": [
             {"page": 1, "type": "cover", "main_text": "인스타 자동화로\n돈 버는 비밀 공개"},
-            {"page": 2, "type": "content", "main_text": "첫째, 트렌드를 분석하고\n둘째, 카피라이팅을 자동화합니다."},
-            {"page": 3, "type": "cta", "main_text": "더 보려면 프로필 링크 클릭!"}
+            {"page": 2, "type": "content", "main_text": "올해 제주 장마는 6월 30일에 시작! 🏳️역대 3번째로 늦은 기록입니다."},
+            {"page": 3, "type": "cta", "main_text": "여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡"}
         ]
     }
     generate_carousel_images(test_plan, "./test_output")
