@@ -174,14 +174,27 @@ def split_emojis(text: str) -> list:
 
 def format_korean_line_breaks(text: str) -> str:
     """
-    Applies custom line break rules for Korean readability.
-    Inserts a newline after specified particles, connectives, commas, exclamation marks, or question marks followed by space.
+    Applies natural line-break rules for Korean readability.
+
+    Only breaks at *sentence* boundaries (terminal punctuation followed by
+    whitespace) so that each complete sentence stays on its own line instead of
+    being chopped in the middle of a phrase. Width-based line wrapping within a
+    sentence is handled separately by wrap_text(), which balances line lengths.
+
+    This intentionally does NOT break after particles/connectives (을/를/와/과/,)
+    because ending a line on a dangling particle reads unnaturally.
     """
     if not text:
         return text
-    # Match '와', '과', ',', '를', '을', '하고', '되고', '!', '?' followed by one or more spaces/tabs
-    pattern = r'(와|과|,|를|을|하고|되고|!|\?)([ \t]+)'
-    return re.sub(pattern, r'\1\n', text)
+    # Break after terminal punctuation (. ! ? …) followed by whitespace.
+    # A trailing space is required so decimals/ratios like "3.5" stay intact,
+    # and a digit before the mark is excluded so ordered-list markers like
+    # "1." / "2." (and numbers ending a clause) are not split off.
+    text = re.sub(r'(?<!\d)([.!?…]+)[ \t]+', r'\1\n', text)
+    # Trim stray spaces around every newline and collapse excessive blank lines.
+    text = re.sub(r'[ \t]*\n[ \t]*', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, stroke_fill=None, **kwargs):
     """
@@ -249,38 +262,105 @@ def draw_gradient_background(width: int, height: int, color_start: tuple, color_
         draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
     return base
 
+def _text_width(font, text: str) -> int:
+    """Returns the pixel width of a string for the given font (with a fallback)."""
+    if hasattr(font, "getbbox"):
+        bbox = font.getbbox(text)
+        return bbox[2] - bbox[0]
+    # Fallback for the old default bitmap font
+    return len(text) * 6
+
+
+def _break_long_word(word: str, font, max_width: int) -> list:
+    """
+    Splits a single token that is wider than max_width into character-level
+    chunks so it never overflows the card (handles long URLs, hashtags, or
+    space-less Korean runs).
+    """
+    chunks = []
+    current = ""
+    for ch in word:
+        if current and _text_width(font, current + ch) > max_width:
+            chunks.append(current)
+            current = ch
+        else:
+            current += ch
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _wrap_balanced(words: list, font, max_width: int) -> list:
+    """
+    Wraps words using minimum-raggedness (balanced) line breaking so lines are
+    filled evenly instead of a long line followed by a lonely orphan word. The
+    final line carries no penalty, so it is allowed to be short.
+    """
+    n = len(words)
+    if n == 0:
+        return []
+
+    space_w = _text_width(font, " ")
+    word_w = [_text_width(font, w) for w in words]
+
+    INF = float("inf")
+    cost = [INF] * (n + 1)
+    nxt = [n] * (n + 1)
+    cost[n] = 0
+
+    for i in range(n - 1, -1, -1):
+        line_w = 0
+        for j in range(i, n):
+            line_w += word_w[j]
+            if j > i:
+                line_w += space_w
+            # Stop extending once a multi-word line exceeds the width.
+            if line_w > max_width and j > i:
+                break
+            is_last = (j == n - 1)
+            slack = max_width - line_w
+            penalty = 0 if is_last else slack * slack
+            total = penalty + cost[j + 1]
+            if total < cost[i]:
+                cost[i] = total
+                nxt[i] = j + 1
+        # Guarantee forward progress even if a single word overflows.
+        if cost[i] == INF:
+            cost[i] = cost[i + 1]
+            nxt[i] = i + 1
+
+    lines = []
+    i = 0
+    while i < n:
+        j = nxt[i]
+        lines.append(" ".join(words[i:j]))
+        i = j
+    return lines
+
+
 def wrap_text(text: str, font, max_width: int) -> list:
     """
-    Wraps text to fit within a maximum width, respecting existing newlines.
+    Wraps text to fit within a maximum width, respecting existing newlines and
+    using balanced (minimum-raggedness) line breaking for natural-looking lines.
+    Overlong single tokens are split at the character level as a safety net.
     """
     lines = []
     for paragraph in text.split("\n"):
         if not paragraph.strip():
             lines.append("")
             continue
-        words = paragraph.split(" ")
-        current_line = []
-        for word in words:
-            test_line = " ".join(current_line + [word]) if current_line else word
-            # Safely get text bounding box
-            if hasattr(font, "getbbox"):
-                bbox = font.getbbox(test_line)
-                w = bbox[2] - bbox[0]
+
+        # Split into words, pre-splitting any token wider than the card.
+        words = []
+        for word in paragraph.split(" "):
+            if not word:
+                continue
+            if _text_width(font, word) > max_width:
+                words.extend(_break_long_word(word, font, max_width))
             else:
-                # Fallback for old default font
-                w = len(test_line) * 6
-                
-            if w <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                    current_line = [word]
-                else:
-                    lines.append(word)
-                    current_line = []
-        if current_line:
-            lines.append(" ".join(current_line))
+                words.append(word)
+
+        lines.extend(_wrap_balanced(words, font, max_width))
     return lines
 
 def get_relative_luminance(image: Image.Image, box: tuple) -> float:
