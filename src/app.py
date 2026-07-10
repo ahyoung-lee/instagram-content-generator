@@ -41,6 +41,9 @@ class PrepareDownloadRequest(BaseModel):
     caption: str
     title: str
 
+class CreateReelRequest(BaseModel):
+    date_str: str
+
 # Define Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAVE_DIR = os.path.join(BASE_DIR, "save")
@@ -288,6 +291,36 @@ def api_prepare_download(payload: PrepareDownloadRequest):
     except Exception as e:
         import traceback
         print(f"Prepare download error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/create_reel")
+def api_create_reel(payload: CreateReelRequest):
+    """
+    Stitches the already-generated card images for a post into an
+    Instagram-Reels-ready MP4 (1080x1920, cross-fade between cards).
+    """
+    try:
+        import glob
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+
+        # Collect the slide images on disk (robust to any prior re-renders).
+        slide_files = sorted(glob.glob(os.path.join(post_dir, "slide_*.jpg")))
+        if not slide_files:
+            raise HTTPException(status_code=404, detail="릴스로 만들 카드 이미지를 찾을 수 없습니다. 먼저 콘텐츠를 생성해 주세요.")
+
+        from src.script_reels import create_reel_video
+        reel_path = create_reel_video(slide_files, post_dir)
+
+        relative_reel_url = f"/save/{payload.date_str}/{os.path.basename(reel_path)}"
+        return {
+            "success": True,
+            "reel_url": relative_reel_url
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Create reel error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Mount save directory to serve generated images

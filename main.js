@@ -66,6 +66,17 @@ const copyCaptionBtn = document.getElementById('copy-caption-btn');
 const titleEditInput = document.getElementById('title-edit-input');
 const updateTitleBtn = document.getElementById('update-title-btn');
 const saveBtn = document.getElementById('save-btn');
+const reelBtn = document.getElementById('reel-btn');
+const saveVideoBtn = document.getElementById('save-video-btn');
+
+// Hide the "영상 저장" button (a previously built reel is stale once the
+// underlying card images change).
+function resetReelButton() {
+    if (saveVideoBtn) {
+        saveVideoBtn.classList.add('hidden');
+        saveVideoBtn.href = '#';
+    }
+}
 
 // Helper to render slides in grid
 function renderSlidesPreview(imageUrls) {
@@ -140,7 +151,10 @@ generateBtn.addEventListener('click', async () => {
             
             // Render Slide Images Preview
             renderSlidesPreview(data.image_urls);
-            
+
+            // A freshly generated post has no reel yet
+            resetReelButton();
+
             // Show Results
             resultsSection.classList.remove('hidden');
         } else {
@@ -219,7 +233,10 @@ updateTitleBtn.addEventListener('click', async () => {
 
             // Render Slide Images Preview
             renderSlidesPreview(data.image_urls);
-            
+
+            // Images changed -> any previously built reel is now stale
+            resetReelButton();
+
             alert('표지 제목이 성공적으로 변경되었습니다!');
         } else {
             alert(`제목 변경 실패: ${data.error || '알 수 없는 오류'}`);
@@ -285,6 +302,59 @@ saveBtn.addEventListener('click', async (e) => {
         saveBtn.style.pointerEvents = 'auto';
         saveBtn.style.opacity = '1';
         saveBtn.innerHTML = originalText;
+    }
+});
+
+// 5. Create Reels Video from the generated cards
+reelBtn.addEventListener('click', async () => {
+    if (!currentPostData.date_str) {
+        alert('영상으로 만들 콘텐츠가 없습니다. 먼저 콘텐츠를 생성해 주세요.');
+        return;
+    }
+
+    const originalText = reelBtn.innerHTML;
+    reelBtn.disabled = true;
+    reelBtn.style.opacity = '0.6';
+    reelBtn.style.pointerEvents = 'none';
+    reelBtn.innerHTML = '🎬 영상 만드는 중...';
+
+    // Reuse the fullscreen loader with a reel-specific message
+    const loadingSub = document.querySelector('.loading-sub');
+    const originalSub = loadingSub ? loadingSub.textContent : '';
+    if (loadingSub) loadingSub.textContent = '카드 이미지를 이어붙여 릴스 영상을 만드는 중입니다.';
+    loadingOverlay.classList.remove('hidden');
+
+    try {
+        const response = await fetch('/api/create_reel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_str: currentPostData.date_str })
+        });
+
+        if (!response.ok) {
+            throw new Error(`서버 에러 발생 (상태 코드: ${response.status})`);
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Reveal the "영상 저장" download button
+            saveVideoBtn.href = data.reel_url + '?t=' + Date.now();
+            saveVideoBtn.download = 'reel.mp4';
+            saveVideoBtn.classList.remove('hidden');
+        } else {
+            alert(`릴스 제작 실패: ${data.error || '알 수 없는 오류'}`);
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`릴스 제작 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+        if (loadingSub) loadingSub.textContent = originalSub;
+        reelBtn.disabled = false;
+        reelBtn.style.opacity = '1';
+        reelBtn.style.pointerEvents = 'auto';
+        reelBtn.innerHTML = originalText;
     }
 });
 
