@@ -1,5 +1,8 @@
 import os
 import glob
+import shutil
+import tempfile
+import subprocess
 from PIL import Image, ImageFilter, ImageEnhance
 import imageio_ffmpeg
 
@@ -81,47 +84,69 @@ def create_reel_video(image_paths: list, output_dir: str,
     if not paths:
         raise ValueError("릴스로 만들 카드 이미지를 찾을 수 없습니다.")
 
-    hold_frames = max(1, int(round(FPS * seconds_per_card)))
-    fade_frames = max(0, int(round(FPS * fade_seconds)))
-
     out_path = os.path.join(output_dir, "reel.mp4")
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
-    # imageio-ffmpeg streams raw RGB frames into a bundled ffmpeg encoder.
-    writer = imageio_ffmpeg.write_frames(
-        out_path,
-        (REEL_W, REEL_H),
-        fps=FPS,
-        codec="libx264",
-        pix_fmt_in="rgb24",
-        pix_fmt_out="yuv420p",
-        macro_block_size=1,  # keep exact 1080x1920 (both are even, valid for yuv420p)
-        output_params=["-movflags", "+faststart", "-preset", "veryfast", "-crf", "23"],
-    )
-    writer.send(None)  # seed the generator
+    dur = max(0.2, float(seconds_per_card))
+    fade = max(0.0, float(fade_seconds))
 
+    # Compose each 9:16 frame to a temp JPG one at a time (tiny peak memory),
+    # then let ffmpeg read the files and do all the encoding itself. This keeps
+    # Python's memory footprint minimal, which matters on small hosts (Render
+    # free tier = 512MB) where streaming hundreds of raw frames can OOM/crash.
+    tmp_dir = tempfile.mkdtemp(prefix="reel_frames_")
     try:
-        n = len(paths)
-        # Compose frames lazily, keeping at most two in memory at once so peak
-        # RAM stays low (important on small hosts like Render's free tier).
-        current = _compose_frame(paths[0])
-        for i in range(n):
-            is_last = (i == n - 1)
-            # Non-final cards give up some hold time to their outgoing fade so
-            # each card occupies roughly `seconds_per_card` overall.
-            this_hold = hold_frames if is_last else max(1, hold_frames - fade_frames)
-            fb = current.tobytes()
-            for _ in range(this_hold):
-                writer.send(fb)
+        frame_files = []
+        for i, p in enumerate(paths):
+            frame = _compose_frame(p)
+            fp = os.path.join(tmp_dir, f"frame_{i:03d}.jpg")
+            frame.save(fp, "JPEG", quality=92)
+            frame.close()
+            frame_files.append(fp)
 
-            if not is_last:
-                nxt = _compose_frame(paths[i + 1])
-                if fade_frames > 0:
-                    for f in range(1, fade_frames + 1):
-                        alpha = f / (fade_frames + 1)
-                        writer.send(Image.blend(current, nxt, alpha).tobytes())
-                current = nxt
+        n = len(frame_files)
+
+        cmd = [ffmpeg, "-y"]
+        for fp in frame_files:
+            cmd += ["-loop", "1", "-t", f"{dur}", "-i", fp]
+
+        # Normalize every input, then either cross-fade or hard-cut between them.
+        parts = [f"[{i}:v]format=yuv420p,setsar=1[v{i}]" for i in range(n)]
+        if n == 1:
+            parts.append("[v0]copy[vout]")
+        elif fade <= 0:
+            labels = "".join(f"[v{i}]" for i in range(n))
+            parts.append(f"{labels}concat=n={n}:v=1:a=0[vout]")
+        else:
+            step = dur - fade  # solo time each card gets before the next fade
+            prev = "[v0]"
+            for i in range(1, n):
+                offset = round(i * step, 3)
+                out_label = "[vout]" if i == n - 1 else f"[vc{i}]"
+                parts.append(
+                    f"{prev}[v{i}]xfade=transition=fade:duration={fade}:offset={offset}{out_label}"
+                )
+                prev = out_label
+        filter_complex = ";".join(parts)
+
+        cmd += [
+            "-filter_complex", filter_complex,
+            "-map", "[vout]",
+            "-r", str(FPS),
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            out_path,
+        ]
+
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0 or not os.path.exists(out_path):
+            tail = (proc.stderr or "")[-1500:]
+            raise RuntimeError(f"ffmpeg 인코딩 실패 (code {proc.returncode}): {tail}")
     finally:
-        writer.close()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     print(f"Reel video created at: {out_path}")
     return out_path
