@@ -171,6 +171,27 @@ def is_emoji(char: str) -> bool:
         0x2500 <= ord_val <= 0x2BFF
     )
 
+# Glyphs that fall in emoji ranges but are intentional design elements to keep.
+_EMOJI_KEEP = {"▶", "◀", "♡", "♥", "❤"}  # ▶ ◀ ♡ ♥ ❤
+
+def remove_emojis(text: str) -> str:
+    """
+    Strips pictographic emoji from text (they render as monochrome/tofu with the
+    bundled emoji font). Intentional design glyphs like the teaser arrow ▶ and
+    the CTA heart ♡ are preserved, and leftover double spaces are collapsed.
+    """
+    if not text:
+        return text
+    out = []
+    for ch in text:
+        if ch in _EMOJI_KEEP or not is_emoji(ch):
+            out.append(ch)
+    cleaned = "".join(out)
+    cleaned = re.sub(r'[ \t]{2,}', ' ', cleaned)   # collapse gaps left by removed emoji
+    cleaned = re.sub(r'[ \t]+(\n|$)', r'\1', cleaned)  # trim trailing spaces per line
+    return cleaned
+
+
 def split_emojis(text: str) -> list:
     segments = []
     current_segment = []
@@ -647,6 +668,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             title_text = (article_title or hooking_title or "").strip()
 
         title_text, _ = strip_highlight_markers(title_text)
+        title_text = remove_emojis(title_text)
 
         # Fit the hook: start at a large size and step down if it wraps to many
         # lines, so the title never overflows into the teaser instead of being
@@ -733,6 +755,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             content_font_bold = get_system_font(56, bold=True)
             main_text = slide.get("main_text", "")
             main_text, _ = strip_highlight_markers(main_text)
+            main_text = remove_emojis(main_text)
             lines = wrap_text(main_text, content_font_bold, WIDTH - 260)
             
             # Center text vertically inside the card body
@@ -780,6 +803,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             content_font = get_system_font(52)
             content_font_bold = get_system_font(52, bold=True)
             main_text = slide.get("main_text", "")
+            main_text = remove_emojis(main_text)
             main_text = format_korean_line_breaks(main_text)
 
             # Visual hierarchy for a clean, premium look:
