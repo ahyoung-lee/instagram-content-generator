@@ -44,7 +44,10 @@ def _compose_frame(card_path: str) -> Image.Image:
     card = Image.open(card_path).convert("RGB")
 
     # Blurred background fills the vertical letterbox area behind the card.
-    bg = _resize_cover(card, REEL_W, REEL_H).filter(ImageFilter.GaussianBlur(40))
+    # Blur on a downscaled copy (cheap) then upscale — visually identical to a
+    # heavy full-res blur but far faster.
+    small = _resize_cover(card, REEL_W // 4, REEL_H // 4).filter(ImageFilter.GaussianBlur(12))
+    bg = small.resize((REEL_W, REEL_H), resample)
     bg = ImageEnhance.Brightness(bg).enhance(0.45)
 
     # Sharp card fitted to the full frame width, centered vertically.
@@ -94,7 +97,7 @@ def create_reel_video(image_paths: list, output_dir: str,
         pix_fmt_in="rgb24",
         pix_fmt_out="yuv420p",
         macro_block_size=1,  # keep exact 1080x1920 (both are even, valid for yuv420p)
-        output_params=["-movflags", "+faststart", "-preset", "medium", "-crf", "20"],
+        output_params=["-movflags", "+faststart", "-preset", "veryfast", "-crf", "23"],
     )
     writer.send(None)  # seed the generator
 
