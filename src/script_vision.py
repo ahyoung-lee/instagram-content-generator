@@ -692,10 +692,11 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
             y_cursor += line_height
             
-        # Draw teaser text at the bottom
+        # Draw teaser text at the bottom, to the RIGHT of the logo watermark
+        # (the logo now sits bottom-left, so the teaser shares that row beside it).
         teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
         teaser_font = get_system_font(26)
-        draw.text((80, HEIGHT - 130), teaser_text, fill=key_color, font=teaser_font) # Placed at bottom left in key color
+        draw.text((235, HEIGHT - 143), teaser_text, fill=key_color, font=teaser_font)
         
     else:
         # Define layout dimensions for content/CTA cards
