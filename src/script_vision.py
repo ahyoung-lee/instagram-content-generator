@@ -639,25 +639,35 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         draw.text((110, 660), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
         
         # Draw Main Title (Bold & Large)
-        title_text = slide.get("main_text", hooking_title)
-        if article_title and article_title.strip():
-            clean_title = article_title.strip()
-            if len(clean_title) > 35:
-                title_text = clean_title[:35] + "..."
-            else:
-                title_text = clean_title
-                
+        # Prefer the AI-generated cover hook (punchy, engaging) over the raw
+        # scraped article title. Fall back to the article/hooking title only
+        # when the cover copy is missing (e.g. legacy plans).
+        title_text = (slide.get("main_text") or "").strip()
+        if not title_text:
+            title_text = (article_title or hooking_title or "").strip()
+
         title_text, _ = strip_highlight_markers(title_text)
-        title_font = get_system_font(84, bold=True)  # Increased from 72 to 84 for larger text
-        lines = wrap_text(title_text, title_font, WIDTH - 160)
-        
-        y_cursor = 730
+
+        # Fit the hook: start at a large size and step down if it wraps to many
+        # lines, so the title never overflows into the teaser instead of being
+        # hard-truncated with an ellipsis.
+        y_start = 730
+        teaser_top = HEIGHT - 150  # keep clear of the bottom teaser text
+        title_font = None
+        lines = []
+        for font_size, line_height in ((84, 110), (74, 98), (64, 86), (56, 76)):
+            title_font = get_system_font(font_size, bold=True)
+            lines = wrap_text(title_text, title_font, WIDTH - 160)
+            if y_start + len(lines) * line_height <= teaser_top:
+                break
+
+        y_cursor = y_start
         for line in lines:
             # Draw a subtle drop shadow (semi-transparent dark gray) at (3, 3) offset
             draw_text_safe(draw, (80 + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
             # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
             draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
-            y_cursor += 110  # Increased from 95 to 110 to match the 84 font size
+            y_cursor += line_height
             
         # Draw teaser text at the bottom
         teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
