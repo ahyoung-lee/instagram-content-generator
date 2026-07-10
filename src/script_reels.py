@@ -6,8 +6,10 @@ import subprocess
 from PIL import Image, ImageFilter, ImageEnhance
 import imageio_ffmpeg
 
-# Instagram Reels: 9:16 full-screen vertical video
-REEL_W, REEL_H = 1080, 1920
+# Instagram Reels: 9:16 full-screen vertical video.
+# 720x1280 (still a valid, Instagram-accepted Reels size) keeps the libx264
+# encoder's memory low enough to run on small hosts (Render free tier = 512MB).
+REEL_W, REEL_H = 720, 1280
 FPS = 30
 
 
@@ -143,7 +145,8 @@ def create_reel_video(image_paths: list, output_dir: str,
             "-f", "concat", "-safe", "0", "-i", list_path,
             "-r", str(FPS),
             "-c:v", "libx264",
-            "-preset", "veryfast",
+            "-preset", "ultrafast",  # lowest encoder memory footprint
+            "-threads", "1",          # avoid per-thread buffer duplication
             "-crf", "23",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
