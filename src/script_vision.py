@@ -441,7 +441,7 @@ def get_relative_luminance(image: Image.Image, box: tuple) -> float:
 def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
     """
     Loads 'img/alwaysgood_logo.png', resizes it to a suitable size,
-    adjusts its opacity, and pastes it in the bottom-right corner of the image.
+    adjusts its opacity, and pastes it in the bottom-left corner of the image.
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     workspace_root = os.path.dirname(current_dir)
@@ -474,8 +474,9 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
         a = a.point(lambda p: int(p * opacity))
         transparent_logo = Image.merge("RGBA", (r, g, b, a))
         
-        # Place in bottom-right corner with padding
-        x = WIDTH - target_width - 50
+        # Place in the bottom-LEFT corner with padding. On Reels the right side
+        # is covered by Instagram's action icons, so the logo goes left instead.
+        x = 50
         y = HEIGHT - target_height - 50
         
         # Paste with transparent mask
