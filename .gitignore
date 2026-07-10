@@ -15,6 +15,7 @@ Thumbs.db
 
 # Local outputs
 save/
+test_output/
 
 # Python Cache
 __pycache__/

@@ -14,6 +14,27 @@ load_dotenv()
 WIDTH = 1080
 HEIGHT = 1350
 
+# Color themes. The creative agent picks a theme name that matches the article's
+# mood/topic; the renderer maps it to a palette. Each theme defines the key/accent
+# color plus the gradient fallback used when no AI background image is available.
+THEMES = {
+    "orange": {"key": (255, 102, 0, 255),  "grad_start": (24, 20, 16), "grad_end": (48, 22, 8)},
+    "blue":   {"key": (10, 132, 255, 255), "grad_start": (12, 16, 30), "grad_end": (10, 28, 54)},
+    "green":  {"key": (34, 197, 94, 255),  "grad_start": (12, 24, 18), "grad_end": (8, 38, 26)},
+    "purple": {"key": (149, 97, 246, 255), "grad_start": (22, 16, 34), "grad_end": (34, 16, 50)},
+    "pink":   {"key": (244, 63, 94, 255),  "grad_start": (30, 14, 20), "grad_end": (48, 14, 28)},
+    "teal":   {"key": (20, 184, 166, 255), "grad_start": (10, 26, 26), "grad_end": (8, 38, 38)},
+}
+DEFAULT_THEME = "orange"
+
+def get_theme(name: str) -> dict:
+    """Resolves a theme name to its palette, falling back to the default theme."""
+    if isinstance(name, str):
+        key = name.strip().lower()
+        if key in THEMES:
+            return THEMES[key]
+    return THEMES[DEFAULT_THEME]
+
 def get_system_font(size: int, bold: bool = False):
     """
     Attempts to load custom fonts placed in the folder first, then loads standard/system fonts.
@@ -261,6 +282,16 @@ def draw_gradient_background(width: int, height: int, color_start: tuple, color_
         b = int(color_start[2] + (color_end[2] - color_start[2]) * ratio)
         draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
     return base
+
+def strip_highlight_markers(text: str) -> tuple:
+    """
+    Removes '**' emphasis markers from a line and reports whether any were
+    present. The creative agent wraps an important sentence in **...** so the
+    renderer can paint it in the theme's key color.
+    """
+    has_highlight = "**" in text
+    return text.replace("**", ""), has_highlight
+
 
 def _text_width(font, text: str) -> int:
     """Returns the pixel width of a string for the given font (with a fallback)."""
@@ -532,14 +563,16 @@ def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -
 
     return resized_img.crop((left, top, right, bottom))
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None) -> Image.Image:
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange") -> Image.Image:
     """
     Generates a single 4:5 image slide based on its content and type.
     Uses a premium glassmorphic card news layout structure for content/CTA,
     and a bold bottom-gradient layout for the cover to make the title pop.
+    The accent/key color and gradient fallback are driven by the chosen theme.
     """
     slide_type = slide.get("type", "content")
-    key_color = (255, 102, 0, 255) # #FF6600
+    theme_data = get_theme(theme)
+    key_color = theme_data["key"]  # theme accent color
     
     if bg_image is not None:
         # We make a copy of the pre-resized cover image
@@ -568,9 +601,9 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 g_draw.line([(0, y), (WIDTH, y)], fill=(10, 10, 15, alpha))
             image = Image.alpha_composite(image, gradient_overlay)
     else:
-        # Fallback to premium gradient if bg_image is None
-        color_start = (20, 20, 30)
-        color_end = (45, 20, 10)
+        # Fallback to premium gradient (theme-tinted) if bg_image is None
+        color_start = theme_data["grad_start"]
+        color_end = theme_data["grad_end"]
         image = draw_gradient_background(WIDTH, HEIGHT, color_start, color_end)
         if image.mode != "RGBA":
             image = image.convert("RGBA")
@@ -614,6 +647,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             else:
                 title_text = clean_title
                 
+        title_text, _ = strip_highlight_markers(title_text)
         title_font = get_system_font(84, bold=True)  # Increased from 72 to 84 for larger text
         lines = wrap_text(title_text, title_font, WIDTH - 160)
         
@@ -642,7 +676,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # Choose card fill and border color based on slide type
         if slide_type == "cta":
             card_fill = (12, 12, 20, 215)  # Slightly higher opacity for final slide contrast
-            card_border = (255, 102, 0, 90)  # Subtle orange highlight border
+            card_border = (key_color[0], key_color[1], key_color[2], 90)  # Subtle themed highlight border
         else:
             card_fill = (12, 12, 20, 210)  # ~82% opacity
             card_border = (255, 255, 255, 40)
@@ -688,6 +722,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             
             content_font_bold = get_system_font(56, bold=True)
             main_text = slide.get("main_text", "")
+            main_text, _ = strip_highlight_markers(main_text)
             lines = wrap_text(main_text, content_font_bold, WIDTH - 260)
             
             # Center text vertically inside the card body
@@ -736,34 +771,52 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             content_font_bold = get_system_font(52, bold=True)
             main_text = slide.get("main_text", "")
             main_text = format_korean_line_breaks(main_text)
-            lines = wrap_text(main_text, content_font, WIDTH - 260)
-            
-            # Center text vertically inside the card body
-            line_height = 88
-            total_text_height = len(lines) * line_height
-            card_content_height = (HEIGHT - 220) - 360 # 770 px
+
+            # Visual hierarchy for a clean, premium look:
+            #  - Header line (e.g. "1. 소제목")  -> bold, near-white
+            #  - Emphasized sentence (**...**)   -> bold, theme key color (the one pop of color)
+            #  - Body text                        -> regular, light gray
+            header_color = (250, 250, 252, 255)
+            body_color = (226, 228, 234, 255)
+
+            render_lines = []  # (text, font, color) after width-wrapping
+            for logical in main_text.split("\n"):
+                if not logical.strip():
+                    continue
+                clean, has_highlight = strip_highlight_markers(logical)
+                cleaned = clean.strip()
+                is_header = bool(
+                    re.match(r'^\d+[\.\)]', cleaned)
+                    or re.match(r'^\d+단계', cleaned)
+                    or cleaned.startswith(("첫째", "둘째", "셋째", "넷째", "다섯째",
+                                            "여섯째", "일곱째", "여덟째", "마지막"))
+                )
+                if is_header:
+                    line_font, line_color = content_font_bold, header_color
+                elif has_highlight:
+                    line_font, line_color = content_font_bold, key_color
+                else:
+                    line_font, line_color = content_font, body_color
+
+                for sub in wrap_text(clean, line_font, WIDTH - 260):
+                    render_lines.append((sub, line_font, line_color))
+
+            # Center text vertically inside the card body, compressing line height
+            # if there are many lines so the text never overflows the card.
+            card_content_height = (HEIGHT - 220) - 360  # 770 px
+            line_height = 84
+            if render_lines and len(render_lines) * line_height > card_content_height:
+                line_height = max(58, card_content_height // len(render_lines))
+
+            total_text_height = len(render_lines) * line_height
             y_cursor = 360 + (card_content_height - total_text_height) // 2
             if y_cursor < 360:
                 y_cursor = 360
-                
-            for line in lines:
-                # Check if this line is a header (like "1. xxx", "첫째", "1단계")
-                is_header = False
-                cleaned = line.strip()
-                if re.match(r'^\d+\.', cleaned) or re.match(r'^\d+단계', cleaned) or cleaned.startswith(("첫째", "둘째", "셋째", "넷째", "다섯째", "마지막")):
-                     is_header = True
-                
-                current_font = content_font_bold if is_header else content_font
-                line_color = key_color if is_header else (245, 245, 250, 255)
-                
-                if hasattr(current_font, "getbbox"):
-                    bbox = current_font.getbbox(line)
-                    w = bbox[2] - bbox[0]
-                else:
-                    w = len(line) * 26
+
+            for text, line_font, line_color in render_lines:
+                w = _text_width(line_font, text)
                 x_pos = (WIDTH - w) // 2
-                
-                draw_text_safe(draw, (x_pos, y_cursor), line, fill=line_color, font=current_font)
+                draw_text_safe(draw, (x_pos, y_cursor), text, fill=line_color, font=line_font)
                 y_cursor += line_height
                 
     # Apply logo watermark to the bottom right corner (outside the card)
@@ -781,6 +834,8 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     hooking_title = plan.get("hooking_title", "Trending")
     image_prompt = plan.get("image_prompt", hooking_title)
     slides = plan.get("slides", [])
+    theme = plan.get("theme", DEFAULT_THEME)  # AI-selected color theme for this carousel
+    print(f"Using color theme: {theme}")
     
     master_bg_path = os.path.join(output_dir, "background_master.png")
     bg_image = None
@@ -808,7 +863,7 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
-        img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title)
+        img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title, theme=theme)
         
         filename = f"slide_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)
@@ -824,10 +879,11 @@ if __name__ == "__main__":
     # Test layout generation
     test_plan = {
         "total_pages": 3,
+        "theme": "blue",
         "hooking_title": "테스트 카드뉴스",
         "slides": [
             {"page": 1, "type": "cover", "main_text": "인스타 자동화로\n돈 버는 비밀 공개"},
-            {"page": 2, "type": "content", "main_text": "올해 제주 장마는 6월 30일에 시작! 🏳️역대 3번째로 늦은 기록입니다."},
+            {"page": 2, "type": "content", "main_text": "1. 제주 장마 시작 🌧️\n올해 제주 장마는 6월 30일에 시작됐어요.\n**역대 3번째로 늦은 기록입니다** 📈"},
             {"page": 3, "type": "cta", "main_text": "여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡"}
         ]
     }
