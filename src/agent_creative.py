@@ -118,9 +118,11 @@ JSON 스키마:
             "근거 없는 추측이나 밋밋한 텍스트 나열은 절대 허용하지 않는다."
         )
 
+        # Primary model: gpt-4o-mini (this project's API key currently has no
+        # access to gpt-4o). gpt-3.5-turbo is kept only as a safety fallback.
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
@@ -130,30 +132,17 @@ JSON 스키마:
                 max_tokens=3000
             )
         except Exception as chat_err:
-            print(f"gpt-4o failed: {chat_err}. Trying gpt-4o-mini fallback...")
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.75,
-                    max_tokens=3000
-                )
-            except Exception as chat_err2:
-                print(f"gpt-4o-mini failed: {chat_err2}. Trying gpt-3.5-turbo fallback...")
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.75,
-                    max_tokens=3000
-                )
+            print(f"gpt-4o-mini failed: {chat_err}. Trying gpt-3.5-turbo fallback...")
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.75,
+                max_tokens=3000
+            )
         
         result_content = response.choices[0].message.content
         data = json.loads(result_content)
