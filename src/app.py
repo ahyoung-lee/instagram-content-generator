@@ -305,6 +305,7 @@ def api_create_reel(payload: CreateReelRequest):
 
         # Collect the slide images on disk (robust to any prior re-renders).
         slide_files = sorted(glob.glob(os.path.join(post_dir, "slide_*.jpg")))
+        print(f"[reel] request date_str={payload.date_str}, slides={len(slide_files)}", flush=True)
         if not slide_files:
             raise HTTPException(status_code=404, detail="릴스로 만들 카드 이미지를 찾을 수 없습니다. 먼저 콘텐츠를 생성해 주세요.")
 
@@ -312,6 +313,7 @@ def api_create_reel(payload: CreateReelRequest):
         reel_path = create_reel_video(slide_files, post_dir)
 
         relative_reel_url = f"/save/{payload.date_str}/{os.path.basename(reel_path)}"
+        print(f"[reel] success -> {relative_reel_url}", flush=True)
         return {
             "success": True,
             "reel_url": relative_reel_url
@@ -320,7 +322,7 @@ def api_create_reel(payload: CreateReelRequest):
         raise
     except Exception as e:
         import traceback
-        print(f"Create reel error: {traceback.format_exc()}")
+        print(f"[reel] ERROR: {traceback.format_exc()}", flush=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # Mount save directory to serve generated images

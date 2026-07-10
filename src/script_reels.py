@@ -94,6 +94,7 @@ def create_reel_video(image_paths: list, output_dir: str,
     # then let ffmpeg read the files and do all the encoding itself. This keeps
     # Python's memory footprint minimal, which matters on small hosts (Render
     # free tier = 512MB) where streaming hundreds of raw frames can OOM/crash.
+    print(f"[reel] composing {len(paths)} frames (9:16)...", flush=True)
     tmp_dir = tempfile.mkdtemp(prefix="reel_frames_")
     try:
         frame_files = []
@@ -105,6 +106,7 @@ def create_reel_video(image_paths: list, output_dir: str,
             frame_files.append(fp)
 
         n = len(frame_files)
+        print(f"[reel] frames ready ({n}). Encoding with ffmpeg...", flush=True)
 
         cmd = [ffmpeg, "-y"]
         for fp in frame_files:
@@ -148,7 +150,7 @@ def create_reel_video(image_paths: list, output_dir: str,
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    print(f"Reel video created at: {out_path}")
+    print(f"[reel] created: {out_path}", flush=True)
     return out_path
 
 
