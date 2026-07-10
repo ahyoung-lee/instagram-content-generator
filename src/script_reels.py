@@ -81,8 +81,6 @@ def create_reel_video(image_paths: list, output_dir: str,
     if not paths:
         raise ValueError("릴스로 만들 카드 이미지를 찾을 수 없습니다.")
 
-    composed = [_compose_frame(p) for p in paths]
-
     hold_frames = max(1, int(round(FPS * seconds_per_card)))
     fade_frames = max(0, int(round(FPS * fade_seconds)))
 
@@ -102,21 +100,26 @@ def create_reel_video(image_paths: list, output_dir: str,
     writer.send(None)  # seed the generator
 
     try:
-        n = len(composed)
-        for i, frame in enumerate(composed):
+        n = len(paths)
+        # Compose frames lazily, keeping at most two in memory at once so peak
+        # RAM stays low (important on small hosts like Render's free tier).
+        current = _compose_frame(paths[0])
+        for i in range(n):
             is_last = (i == n - 1)
             # Non-final cards give up some hold time to their outgoing fade so
             # each card occupies roughly `seconds_per_card` overall.
             this_hold = hold_frames if is_last else max(1, hold_frames - fade_frames)
-            fb = frame.tobytes()
+            fb = current.tobytes()
             for _ in range(this_hold):
                 writer.send(fb)
 
-            if not is_last and fade_frames > 0:
-                nxt = composed[i + 1]
-                for f in range(1, fade_frames + 1):
-                    alpha = f / (fade_frames + 1)
-                    writer.send(Image.blend(frame, nxt, alpha).tobytes())
+            if not is_last:
+                nxt = _compose_frame(paths[i + 1])
+                if fade_frames > 0:
+                    for f in range(1, fade_frames + 1):
+                        alpha = f / (fade_frames + 1)
+                        writer.send(Image.blend(current, nxt, alpha).tobytes())
+                current = nxt
     finally:
         writer.close()
 
