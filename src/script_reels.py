@@ -87,53 +87,60 @@ def create_reel_video(image_paths: list, output_dir: str,
     out_path = os.path.join(output_dir, "reel.mp4")
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
-    dur = max(0.2, float(seconds_per_card))
+    per = max(0.2, float(seconds_per_card))
     fade = max(0.0, float(fade_seconds))
+    n = len(paths)
+    blend_count = int(round(fade * FPS)) if fade > 0 else 0
 
-    # Compose each 9:16 frame to a temp JPG one at a time (tiny peak memory),
-    # then let ffmpeg read the files and do all the encoding itself. This keeps
-    # Python's memory footprint minimal, which matters on small hosts (Render
-    # free tier = 512MB) where streaming hundreds of raw frames can OOM/crash.
-    print(f"[reel] composing {len(paths)} frames (9:16)...", flush=True)
+    # Pre-render EVERY frame (holds + cross-fade blends) to disk one at a time,
+    # then let ffmpeg's concat demuxer read the images sequentially. Both Python
+    # and ffmpeg only ever hold a frame or two in memory, which is essential on
+    # small hosts (Render free tier = 512MB) where the xfade filter graph would
+    # buffer too many 1080x1920 frames and get OOM-killed.
+    print(f"[reel] composing frames for {n} cards (9:16)...", flush=True)
     tmp_dir = tempfile.mkdtemp(prefix="reel_frames_")
     try:
-        frame_files = []
-        for i, p in enumerate(paths):
-            frame = _compose_frame(p)
-            fp = os.path.join(tmp_dir, f"frame_{i:03d}.jpg")
-            frame.save(fp, "JPEG", quality=92)
-            frame.close()
-            frame_files.append(fp)
+        entries = []  # (absolute_path, duration_seconds)
+        counter = {"i": 0}
 
-        n = len(frame_files)
-        print(f"[reel] frames ready ({n}). Encoding with ffmpeg...", flush=True)
+        def write_img(img):
+            fp = os.path.join(tmp_dir, f"f{counter['i']:05d}.jpg")
+            img.save(fp, "JPEG", quality=90)
+            counter["i"] += 1
+            return fp
 
-        cmd = [ffmpeg, "-y"]
-        for fp in frame_files:
-            cmd += ["-loop", "1", "-t", f"{dur}", "-i", fp]
+        current = _compose_frame(paths[0])
+        for i in range(n):
+            is_last = (i == n - 1)
+            # Each non-final card holds for (per - fade) then blends for `fade`,
+            # so it occupies ~`per` seconds overall; the final card holds `per`.
+            hold = per if is_last else max(0.05, per - fade)
+            entries.append((write_img(current), hold))
 
-        # Normalize every input, then either cross-fade or hard-cut between them.
-        parts = [f"[{i}:v]format=yuv420p,setsar=1[v{i}]" for i in range(n)]
-        if n == 1:
-            parts.append("[v0]copy[vout]")
-        elif fade <= 0:
-            labels = "".join(f"[v{i}]" for i in range(n))
-            parts.append(f"{labels}concat=n={n}:v=1:a=0[vout]")
-        else:
-            step = dur - fade  # solo time each card gets before the next fade
-            prev = "[v0]"
-            for i in range(1, n):
-                offset = round(i * step, 3)
-                out_label = "[vout]" if i == n - 1 else f"[vc{i}]"
-                parts.append(
-                    f"{prev}[v{i}]xfade=transition=fade:duration={fade}:offset={offset}{out_label}"
-                )
-                prev = out_label
-        filter_complex = ";".join(parts)
+            if not is_last:
+                nxt = _compose_frame(paths[i + 1])
+                for k in range(1, blend_count + 1):
+                    alpha = k / (blend_count + 1)
+                    entries.append((write_img(Image.blend(current, nxt, alpha)), 1.0 / FPS))
+                current.close()
+                current = nxt
+        current.close()
 
-        cmd += [
-            "-filter_complex", filter_complex,
-            "-map", "[vout]",
+        # Build the concat demuxer playlist (durations control timing).
+        list_path = os.path.join(tmp_dir, "list.txt")
+        with open(list_path, "w") as lf:
+            lf.write("ffconcat version 1.0\n")
+            for fp, d in entries:
+                lf.write(f"file '{fp}'\n")
+                lf.write(f"duration {d:.4f}\n")
+            # The concat demuxer ignores the final entry's duration unless the
+            # last image is listed once more.
+            lf.write(f"file '{entries[-1][0]}'\n")
+
+        print(f"[reel] {len(entries)} frames ready. Encoding with ffmpeg...", flush=True)
+        cmd = [
+            ffmpeg, "-y",
+            "-f", "concat", "-safe", "0", "-i", list_path,
             "-r", str(FPS),
             "-c:v", "libx264",
             "-preset", "veryfast",
@@ -142,7 +149,6 @@ def create_reel_video(image_paths: list, output_dir: str,
             "-movflags", "+faststart",
             out_path,
         ]
-
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0 or not os.path.exists(out_path):
             tail = (proc.stderr or "")[-1500:]
