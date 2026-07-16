@@ -24,6 +24,8 @@ THEMES = {
     "purple": {"key": (149, 97, 246, 255), "grad_start": (22, 16, 34), "grad_end": (34, 16, 50)},
     "pink":   {"key": (244, 63, 94, 255),  "grad_start": (30, 14, 20), "grad_end": (48, 14, 28)},
     "teal":   {"key": (20, 184, 166, 255), "grad_start": (10, 26, 26), "grad_end": (8, 38, 38)},
+    "yellow": {"key": (250, 204, 21, 255), "grad_start": (26, 22, 8),  "grad_end": (44, 34, 6)},
+    "red":    {"key": (255, 59, 48, 255),  "grad_start": (28, 12, 12), "grad_end": (50, 12, 10)},
 }
 DEFAULT_THEME = "orange"
 
