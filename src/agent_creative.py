@@ -9,7 +9,7 @@ load_dotenv()
 def generate_instagram_plan(article_title: str, article_content: str) -> dict:
     """
     Analyzes article content using OpenAI and generates an Instagram carousel plan.
-    Includes a hooking title, slides (2-10 pages), and a monetization caption with 30 hashtags.
+    Includes a hooking title, slides (2-10 pages), and a concise caption with 4 hashtags.
     Returns a dictionary matching the specified JSON schema.
     """
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -41,7 +41,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
                 "main_text": "여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡"
             }
         ],
-        "final_caption": "AI로 인스타그램 자동화 시작하기\n\n매일 무슨 콘텐츠 올릴지 고민되셨나요?\n이제 AI 에이전트 시스템이 실시간 트렌드를 읽어와 최적화된 카드뉴스와 해시태그까지 자동으로 만들어 드립니다!\n\n시간은 절약하고, 수익은 극대화하는 비결이 궁금하다면?\n지금 바로 프로필 링크를 확인해 보세요.\n\n#인스타그램자동화 #인스타마케팅 #부업추천 #AI마케팅 #콘텐츠제작",
+        "final_caption": "AI 에이전트로 인스타그램 콘텐츠를 자동 생성하세요\n\n· 실시간 트렌드를 읽어 카드뉴스를 자동 제작\n· 최적화된 본문과 해시태그까지 한 번에 완성\n· 콘텐츠 기획 시간을 절반 이하로 단축\n\n다운로드/활용법: 공식 홈페이지에서 설치 후 뉴스 링크만 넣으면 완성\n\n더 자세한 내용은 프로필 링크에서 확인하세요\n\n#인스타그램자동화 #AI마케팅 #콘텐츠제작 #부업추천",
         "image_prompt": "A modern premium digital illustration of a sleek glowing artificial intelligence robot head, side profile, centered, minimalist dark studio background, cinematic lighting, gold and blue accents."
     }
 
@@ -72,7 +72,13 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
 6. 마지막 'cta' 페이지의 `main_text`는 다른 문장을 절대 섞지 말고, 반드시 정확히 아래의 2줄로만 고정해서 반환해줘 (매우 중요):
 여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡
 7. 동일한 기사 링크로 여러 번 요청될 수 있으니, 매번 텍스트 생성 시 이전 버전과 다른 깊이 있는 분석 각도나 새로운 유용한 디테일을 찾아 독창적이고 심도 있게 작성해줘.
-8. `final_caption`에는 풍부하고 유용한 정보성 본문 텍스트를 작성하고, 마지막에 관련 해시태그는 뉴스 기사의 핵심 키워드를 반영한 대표적인 해시태그 딱 5개만 공백으로 구분해서 한 줄에 적어줘. 절대 5개를 초과하거나 미달하지 않도록 정확히 5개의 해시태그로 작성해줘.
+8. `final_caption`은 장황하게 늘어놓지 말고, 독자가 스크롤하며 3초 안에 핵심을 파악할 수 있도록 아래 구조로 밀도 있게 '핵심화'해서 작성해줘 (매우 중요):
+   - (1) 첫 1~2줄: 이 콘텐츠의 가장 중요한 핵심 메시지 한 방(무엇에 관한 것인지, 왜 중요한지)을 강력하게 압축해서 제시해.
+   - (2) 그 다음: 기사에서 독자가 꼭 알아야 할 핵심 요점 2~3개만 골라, 각 항목을 짧은 한 줄로 간결하게 정리해(불필요한 미사여구·중복 설명 금지). 각 줄 앞에 '·' 기호를 붙여 목록처럼 보이게 해줘.
+   - (3) '어디서 다운로드하고 어떻게 사용할 수 있는지'가 기사에 언급되어 있다면, 다운로드 경로/방법(예: 앱스토어, 공식 홈페이지, 스토어 이름 등)과 실제 활용법을 반드시 명확한 한 줄로 짚어줘. 기사에 관련 정보가 없으면 억지로 지어내지 말고 이 줄은 생략해.
+   - (4) 마지막 CTA 한 줄: "더 자세한 내용은 프로필 링크에서 확인하세요"처럼 행동을 유도하는 짧은 문장.
+   - 각 블록 사이에는 `\\n\\n`으로 여백을 줘서 가독성을 확보해. 전체 본문은 군더더기 없이 핵심만 담아 간결하게 유지해.
+   - 본문 맨 마지막 줄에는 뉴스 기사의 핵심 키워드를 반영한 대표 해시태그를 딱 4개만 공백으로 구분해서 한 줄에 적어줘. 절대 4개를 초과하거나 미달하지 않도록 정확히 4개의 해시태그로 작성해줘.
 9. (매우 중요) 모든 슬라이드와 캡션(main_text, hooking_title, final_caption 등)에 이모지·이모티콘·특수 픽토그램을 절대 넣지 마. 오직 한글/숫자/기본 문장부호 텍스트만 사용해서 깔끔하고 정돈된 느낌으로 작성해줘. (단, 캡션 맨 끝의 해시태그는 예외)
 10. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 DALL-E 이미지용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 전체적인 배경 이미지로 사용될 것이므로, 절대 텍스트(글자), 워터마크, 서명, 지저분한 패턴, 세부 얼굴 묘사 등은 제외하고, 중심이 되는 주요 상징 오브젝트(예: 로봇, 뇌, 스마트폰, 돈, 차트 등)가 입체적이고 고급스럽게 묘사된 3D 렌더링 혹은 미래지향적인 프리미엄 일러스트 스타일로 작성해줘. 배경은 어둡고 깔끔한 스튜디오 조명 느낌을 권장해. (예시: "A premium 3D render of a futuristic glowing brain icon, cybernetic lines, centered on a clean dark gradient background, cinematic lighting, gold and blue highlights")
 11. (매우 중요) 기사의 주제와 분위기에 가장 잘 어울리는 카드뉴스 강조 색상 테마를 아래 6개 중 딱 하나만 골라 `theme` 값으로 반환해줘. 반드시 아래 영문 키워드 그대로 소문자로 적어야 해:
@@ -100,7 +106,7 @@ JSON 스키마:
     {{"page": 6, "type": "content", "main_text": "5. 시리 통합\\n음성 명령 한마디로\\n**앱 실행부터 요약까지 처리합니다**"}},
     {{"page": 7, "type": "cta", "main_text": "여러분 생각은 어떠신가요?\\n이 정보를 필요한 친구에게 공유하세요♡"}}
   ],
-  "final_caption": "인스타그램 업로드용 전체 본문 텍스트 및 CTA 구문... \\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4 #해시태그5",
+  "final_caption": "핵심 메시지 한 방\\n\\n· 핵심 요점 1\\n· 핵심 요점 2\\n· 핵심 요점 3\\n\\n다운로드/활용법: 어디서 받아 어떻게 쓰는지 한 줄\\n\\n더 자세한 내용은 프로필 링크에서 확인하세요\\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4",
   "image_prompt": "A premium detailed English prompt for DALL-E based on the selected keywords"
 }}
 """
@@ -162,7 +168,7 @@ JSON 스키마:
         fallback_copy["slides"][0]["main_text"] = f"화제의 이슈!\n{article_title[:15]}\n핵심 요약 정리"
         fallback_copy["slides"][1]["main_text"] = f"기사 본문 내용 요약:\n{article_content[:50]}..."
         fallback_copy["slides"][2]["main_text"] = "트렌드 변화 속에서\n우리가 준비해야 할\n비즈니스 기회는 무엇일까요?"
-        fallback_copy["final_caption"] = f"화제의 이슈 소식 안내\n\n{article_title}\n\n상세한 트렌드 분석과 비즈니스 활용 팁은 프로필 링크에서 만나보세요.\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석 #핫토픽"
+        fallback_copy["final_caption"] = f"{article_title}\n\n· 지금 가장 주목받는 핵심 이슈 정리\n· 놓치면 안 되는 배경과 포인트\n\n더 자세한 내용은 프로필 링크에서 확인하세요\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석"
         fallback_copy["image_prompt"] = f"A premium 3D digital illustration representing {article_title[:20]}, dark clean background, sleek glowing design, neon lighting, cinematic rendering."
         return fallback_copy
 
