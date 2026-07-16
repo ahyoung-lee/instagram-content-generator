@@ -14,9 +14,9 @@ load_dotenv()
 WIDTH = 1080
 HEIGHT = 1350
 
-# Color themes. The creative agent picks a theme name that matches the article's
-# mood/topic; the renderer maps it to a palette. Each theme defines the key/accent
-# color plus the gradient fallback used when no AI background image is available.
+# Color themes. The creative agent assigns a theme name at random (independent of
+# the article topic); the renderer maps it to a palette. Each theme defines the
+# key/accent color plus the gradient fallback used when no AI background image is available.
 THEMES = {
     "orange": {"key": (255, 102, 0, 255),  "grad_start": (24, 20, 16), "grad_end": (48, 22, 8)},
     "blue":   {"key": (10, 132, 255, 255), "grad_start": (12, 16, 30), "grad_end": (10, 28, 54)},
@@ -870,7 +870,7 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     hooking_title = plan.get("hooking_title", "Trending")
     image_prompt = plan.get("image_prompt", hooking_title)
     slides = plan.get("slides", [])
-    theme = plan.get("theme", DEFAULT_THEME)  # AI-selected color theme for this carousel
+    theme = plan.get("theme", DEFAULT_THEME)  # randomly assigned color theme for this carousel
     print(f"Using color theme: {theme}")
     
     master_bg_path = os.path.join(output_dir, "background_master.png")

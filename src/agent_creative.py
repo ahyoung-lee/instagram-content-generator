@@ -1,10 +1,15 @@
 import os
 import json
+import random
 from openai import OpenAI
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Available color themes. The theme for each carousel is chosen at random
+# (independent of the article topic) so the visual palette stays varied.
+AVAILABLE_THEMES = ["orange", "blue", "green", "purple", "pink", "teal"]
 
 def generate_instagram_plan(article_title: str, article_content: str) -> dict:
     """
@@ -81,14 +86,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
    - 본문 맨 마지막 줄에는 뉴스 기사의 핵심 키워드를 반영한 대표 해시태그를 딱 4개만 공백으로 구분해서 한 줄에 적어줘. 절대 4개를 초과하거나 미달하지 않도록 정확히 4개의 해시태그로 작성해줘.
 9. (매우 중요) 모든 슬라이드와 캡션(main_text, hooking_title, final_caption 등)에 이모지·이모티콘·특수 픽토그램을 절대 넣지 마. 오직 한글/숫자/기본 문장부호 텍스트만 사용해서 깔끔하고 정돈된 느낌으로 작성해줘. (단, 캡션 맨 끝의 해시태그는 예외)
 10. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 DALL-E 이미지용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 전체적인 배경 이미지로 사용될 것이므로, 절대 텍스트(글자), 워터마크, 서명, 지저분한 패턴, 세부 얼굴 묘사 등은 제외하고, 중심이 되는 주요 상징 오브젝트(예: 로봇, 뇌, 스마트폰, 돈, 차트 등)가 입체적이고 고급스럽게 묘사된 3D 렌더링 혹은 미래지향적인 프리미엄 일러스트 스타일로 작성해줘. 배경은 어둡고 깔끔한 스튜디오 조명 느낌을 권장해. (예시: "A premium 3D render of a futuristic glowing brain icon, cybernetic lines, centered on a clean dark gradient background, cinematic lighting, gold and blue highlights")
-11. (매우 중요) 기사의 주제와 분위기에 가장 잘 어울리는 카드뉴스 강조 색상 테마를 아래 6개 중 딱 하나만 골라 `theme` 값으로 반환해줘. 반드시 아래 영문 키워드 그대로 소문자로 적어야 해:
-   - "orange": 트렌드/에너지/마케팅/일반 (기본, 활기찬 느낌)
-   - "blue": IT/기술/금융/신뢰/비즈니스
-   - "green": 환경/건강/성장/경제/친환경
-   - "purple": AI/창의/디자인/프리미엄/미래
-   - "pink": 라이프스타일/뷰티/엔터테인먼트/감성
-   - "teal": 혁신/스타트업/과학/청량/새로움
-   주제가 애매하면 "orange"를 골라. 반드시 6개 중 하나의 정확한 영문 키워드만 반환해.
+11. 카드뉴스 강조 색상 테마(`theme`)는 시스템이 랜덤으로 배정하므로 네가 주제에 맞춰 고민할 필요는 없어. `theme` 값은 아무 값이나 넣어도 되고 생략해도 돼 (어차피 무시되고 랜덤 값으로 덮어써져).
 
 반드시 아래 JSON 스키마 구조의 유효한 JSON 객체로만 응답해야 해. 다른 부가적인 텍스트(예: ```json 등)는 제외해줘.
 
@@ -156,6 +154,8 @@ JSON 스키마:
         # Validate keys in response
         required_keys = ["total_pages", "hooking_title", "slides", "final_caption"]
         if all(key in data for key in required_keys):
+            # Assign the color theme at random (ignore any topic-based value the model returned)
+            data["theme"] = random.choice(AVAILABLE_THEMES)
             return data
         else:
             raise ValueError("Response missing required keys")
@@ -170,6 +170,7 @@ JSON 스키마:
         fallback_copy["slides"][2]["main_text"] = "트렌드 변화 속에서\n우리가 준비해야 할\n비즈니스 기회는 무엇일까요?"
         fallback_copy["final_caption"] = f"{article_title}\n\n· 지금 가장 주목받는 핵심 이슈 정리\n· 놓치면 안 되는 배경과 포인트\n\n더 자세한 내용은 프로필 링크에서 확인하세요\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석"
         fallback_copy["image_prompt"] = f"A premium 3D digital illustration representing {article_title[:20]}, dark clean background, sleek glowing design, neon lighting, cinematic rendering."
+        fallback_copy["theme"] = random.choice(AVAILABLE_THEMES)
         return fallback_copy
 
 if __name__ == "__main__":
