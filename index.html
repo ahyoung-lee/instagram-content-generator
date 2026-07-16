@@ -103,6 +103,20 @@
         </div>
     </div>
 
+    <!-- Password Input Modal (masked) -->
+    <div id="password-modal" class="password-modal hidden">
+        <div class="password-box">
+            <h4>🔒 비밀번호 입력</h4>
+            <p>콘텐츠를 생성하려면 비밀번호를 입력하세요.</p>
+            <input type="password" id="password-input" placeholder="비밀번호" autocomplete="current-password"
+                aria-label="비밀번호">
+            <div class="password-actions">
+                <button id="password-cancel-btn" class="btn-secondary" type="button">취소</button>
+                <button id="password-ok-btn" class="btn-primary" type="button">확인</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Image Preview Modal -->
     <div id="image-modal" class="image-modal hidden">
         <span class="modal-close">&times;</span>

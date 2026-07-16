@@ -81,11 +81,48 @@ function captureAccessKeyFromUrl() {
     }
 }
 
+// Shows a masked (password) input modal and resolves with the entered value
+// ('' if cancelled). Falls back to a native prompt if the markup is missing.
+function promptPassword() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('password-modal');
+        const input = document.getElementById('password-input');
+        const okBtn = document.getElementById('password-ok-btn');
+        const cancelBtn = document.getElementById('password-cancel-btn');
+
+        if (!modal || !input || !okBtn || !cancelBtn) {
+            resolve((window.prompt('생성하려면 비밀번호를 입력하세요:') || '').trim());
+            return;
+        }
+
+        input.value = '';
+        modal.classList.remove('hidden');
+        setTimeout(() => input.focus(), 50);
+
+        const cleanup = () => {
+            modal.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            input.removeEventListener('keydown', onKey);
+        };
+        const onOk = () => { const v = input.value.trim(); cleanup(); resolve(v); };
+        const onCancel = () => { cleanup(); resolve(''); };
+        const onKey = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+            else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        input.addEventListener('keydown', onKey);
+    });
+}
+
 // Returns the saved password, or prompts for it the first time and remembers it.
-function ensureAccessKey() {
+async function ensureAccessKey() {
     let key = getStoredAccessKey();
     if (!key) {
-        key = (prompt('생성하려면 비밀번호를 입력하세요:') || '').trim();
+        key = await promptPassword();
         setStoredAccessKey(key);
     }
     return key;
@@ -93,7 +130,7 @@ function ensureAccessKey() {
 
 // fetch wrapper that attaches the access key and surfaces a clear 401 message.
 async function apiFetch(url, options = {}) {
-    const key = ensureAccessKey();
+    const key = await ensureAccessKey();
     const headers = Object.assign({}, options.headers, { 'X-Access-Key': key });
     const response = await fetch(url, Object.assign({}, options, { headers }));
     if (response.status === 401) {
@@ -289,7 +326,7 @@ generateBtn.addEventListener('click', async () => {
     const url = urlInput.value.strip ? urlInput.value.strip() : urlInput.value.trim();
 
     // Ask for the password first (only the first time), before any loading UI.
-    if (!ensureAccessKey()) {
+    if (!(await ensureAccessKey())) {
         alert('비밀번호를 입력해야 생성할 수 있습니다.');
         return;
     }
