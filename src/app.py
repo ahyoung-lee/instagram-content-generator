@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -63,10 +63,48 @@ class PrepareDownloadRequest(BaseModel):
 class CreateReelRequest(BaseModel):
     date_str: str
 
+class DeleteImageRequest(BaseModel):
+    date_str: str
+    filename: str
+
 # Define Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAVE_DIR = os.path.join(BASE_DIR, "save")
 os.makedirs(SAVE_DIR, exist_ok=True)
+
+# --- Slide ordering ("sequence") helpers ---
+# A post's card order is stored as plan.json["sequence"], an ordered list of
+# filenames in the post folder. It mixes AI-generated cards (slide_XX.jpg) with
+# user-inserted photos (extra_*.jpg) so downloads and reels honor the exact order.
+
+def _plan_path(post_dir: str) -> str:
+    return os.path.join(post_dir, "plan.json")
+
+def _load_plan_data(post_dir: str) -> dict:
+    with open(_plan_path(post_dir), "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _save_plan_data(post_dir: str, data: dict) -> None:
+    with open(_plan_path(post_dir), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def _default_sequence(post_dir: str) -> List[str]:
+    """Filenames of the AI cards on disk, in page order (fallback when no sequence)."""
+    import glob
+    return [os.path.basename(p) for p in sorted(glob.glob(os.path.join(post_dir, "slide_*.jpg")))]
+
+def _get_sequence(post_dir: str, data: dict) -> List[str]:
+    seq = data.get("sequence")
+    if not seq:
+        seq = _default_sequence(post_dir)
+    # Drop any entries whose files no longer exist on disk.
+    return [name for name in seq if os.path.exists(os.path.join(post_dir, name))]
+
+def _ordered_paths(post_dir: str, data: dict) -> List[str]:
+    return [os.path.join(post_dir, name) for name in _get_sequence(post_dir, data)]
+
+def _urls_from_sequence(date_str: str, sequence: List[str]) -> List[str]:
+    return [f"/save/{date_str}/{name}" for name in sequence]
 
 @app.post("/api/generate")
 def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(default=None)):
@@ -130,6 +168,9 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
         zip_path = create_zip_archive(generated_files, caption_path, post_dir)
         relative_zip_url = f"/save/{date_str}/{url_hash}/{os.path.basename(zip_path)}"
             
+        # Ordered list of card filenames (AI cards now; user photos inserted later).
+        sequence = [os.path.basename(p) for p in generated_files]
+
         # Save to plan.json cache
         cache_content = {
             "requested_url": payload.url,
@@ -139,7 +180,8 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
             "plan": plan,
             "image_urls": relative_image_urls,
             "absolute_paths": generated_files,
-            "zip_url": relative_zip_url
+            "zip_url": relative_zip_url,
+            "sequence": sequence
         }
         try:
             with open(plan_file, "w", encoding="utf-8") as f:
@@ -163,6 +205,97 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
         import traceback
         error_details = traceback.format_exc()
         print(f"Generation error: {error_details}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/insert_image")
+async def api_insert_image(
+    date_str: str = Form(...),
+    position: int = Form(...),
+    file: UploadFile = File(...),
+    x_access_key: Optional[str] = Header(default=None),
+):
+    """
+    Inserts a user-uploaded photo into the carousel at the given position.
+    The photo is normalized to the 4:5 card size and spliced into the post's
+    sequence so downloads and reels include it in order.
+    """
+    verify_access(x_access_key)
+    try:
+        post_dir = os.path.join(SAVE_DIR, date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        # Basic validation: only accept image uploads.
+        if not (file.content_type or "").lower().startswith("image/"):
+            raise HTTPException(status_code=400, detail="이미지 파일만 삽입할 수 있습니다.")
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+        data = _load_plan_data(post_dir)
+        sequence = _get_sequence(post_dir, data)
+
+        # Save the normalized photo under a unique extra_* name.
+        import time
+        from src.script_vision import save_uploaded_image_as_slide
+        new_name = f"extra_{int(time.time() * 1000)}.jpg"
+        save_uploaded_image_as_slide(contents, post_dir, new_name)
+
+        # Splice it in at the requested position (clamped to valid range).
+        pos = max(0, min(int(position), len(sequence)))
+        sequence.insert(pos, new_name)
+        data["sequence"] = sequence
+        _save_plan_data(post_dir, data)
+
+        return {
+            "success": True,
+            "image_urls": _urls_from_sequence(date_str, sequence),
+            "sequence": sequence,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Insert image error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/delete_image")
+def api_delete_image(payload: DeleteImageRequest, x_access_key: Optional[str] = Header(default=None)):
+    """
+    Removes an image from the carousel order. User-inserted photos (extra_*)
+    are also deleted from disk; AI cards are only removed from the sequence so
+    they can be restored by a re-render.
+    """
+    verify_access(x_access_key)
+    try:
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        name = os.path.basename(payload.filename)  # guard against path traversal
+        data = _load_plan_data(post_dir)
+        sequence = [n for n in _get_sequence(post_dir, data) if n != name]
+        data["sequence"] = sequence
+        _save_plan_data(post_dir, data)
+
+        # Physically remove user-inserted photos only.
+        if name.startswith("extra_"):
+            try:
+                os.remove(os.path.join(post_dir, name))
+            except OSError:
+                pass
+
+        return {
+            "success": True,
+            "image_urls": _urls_from_sequence(payload.date_str, sequence),
+            "sequence": sequence,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Delete image error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/publish")
@@ -247,15 +380,15 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
             article_title=payload.title
         )
         
-        relative_image_urls = []
-        for file_path in generated_files:
-            filename = os.path.basename(file_path)
-            relative_image_urls.append(f"/save/{payload.date_str}/{filename}")
-            
-        # Update caption.txt and zip archive too
+        # Re-rendering rewrites the slide_XX files in place, so the stored
+        # sequence (incl. any inserted photos) stays valid. Return it in order.
+        sequence = _get_sequence(post_dir, plan_data)
+        relative_image_urls = _urls_from_sequence(payload.date_str, sequence)
+
+        # Update caption.txt and zip archive too (zip follows the sequence order)
         from src.script_instagram import save_caption_file, create_zip_archive
         caption_path = save_caption_file(plan_data["plan"].get("final_caption", ""), post_dir)
-        zip_path = create_zip_archive(generated_files, caption_path, post_dir)
+        zip_path = create_zip_archive(_ordered_paths(post_dir, plan_data), caption_path, post_dir)
         relative_zip_url = f"/save/{payload.date_str}/{os.path.basename(zip_path)}"
         
         return {
@@ -302,9 +435,9 @@ def api_prepare_download(payload: PrepareDownloadRequest, x_access_key: Optional
         # Save sufficed/edited caption
         from src.script_instagram import save_caption_file, create_zip_archive
         caption_path = save_caption_file(payload.caption, post_dir)
-        
-        # Create ZIP containing updated files
-        zip_path = create_zip_archive(generated_files, caption_path, post_dir)
+
+        # Create ZIP following the sequence order (includes inserted photos)
+        zip_path = create_zip_archive(_ordered_paths(post_dir, plan_data), caption_path, post_dir)
         relative_zip_url = f"/save/{payload.date_str}/{os.path.basename(zip_path)}"
         
         return {
@@ -327,8 +460,13 @@ def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = He
         import glob
         post_dir = os.path.join(SAVE_DIR, payload.date_str)
 
-        # Collect the slide images on disk (robust to any prior re-renders).
-        slide_files = sorted(glob.glob(os.path.join(post_dir, "slide_*.jpg")))
+        # Prefer the saved sequence (AI cards + inserted photos, in order);
+        # fall back to whatever slide images are on disk.
+        slide_files = []
+        if os.path.exists(_plan_path(post_dir)):
+            slide_files = _ordered_paths(post_dir, _load_plan_data(post_dir))
+        if not slide_files:
+            slide_files = sorted(glob.glob(os.path.join(post_dir, "slide_*.jpg")))
         print(f"[reel] request date_str={payload.date_str}, slides={len(slide_files)}", flush=True)
         if not slide_files:
             raise HTTPException(status_code=404, detail="릴스로 만들 카드 이미지를 찾을 수 없습니다. 먼저 콘텐츠를 생성해 주세요.")

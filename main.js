@@ -129,33 +129,157 @@ function resetReelButton() {
     }
 }
 
+// --- Insert / delete user photos in the carousel ---
+let currentImageUrls = [];
+let pendingInsertPosition = null;
+let hiddenFileInput = null;
+
+// A single reusable hidden file picker for photo insertion.
+function getHiddenFileInput() {
+    if (!hiddenFileInput) {
+        hiddenFileInput = document.createElement('input');
+        hiddenFileInput.type = 'file';
+        hiddenFileInput.accept = 'image/*';
+        hiddenFileInput.style.display = 'none';
+        document.body.appendChild(hiddenFileInput);
+        hiddenFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = ''; // allow re-selecting the same file next time
+            if (file && pendingInsertPosition !== null) {
+                await insertImageAt(pendingInsertPosition, file);
+            }
+            pendingInsertPosition = null;
+        });
+    }
+    return hiddenFileInput;
+}
+
+// Opens the file picker; the chosen photo is inserted at `position`.
+function triggerInsertAt(position) {
+    if (!currentPostData.date_str) {
+        alert('먼저 콘텐츠를 생성해 주세요.');
+        return;
+    }
+    pendingInsertPosition = position;
+    getHiddenFileInput().click();
+}
+
+async function insertImageAt(position, file) {
+    loadingOverlay.classList.remove('hidden');
+    try {
+        const form = new FormData();
+        form.append('date_str', currentPostData.date_str);
+        form.append('position', String(position));
+        form.append('file', file);
+
+        const response = await apiFetch('/api/insert_image', { method: 'POST', body: form });
+        if (!response.ok) {
+            let msg = `서버 에러 (상태 코드: ${response.status})`;
+            try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+            throw new Error(msg);
+        }
+        const data = await response.json();
+        if (data.success) {
+            renderSlidesPreview(data.image_urls);
+            // Card order changed -> any previously built reel is now stale.
+            resetReelButton();
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`사진 삽입 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+async function deleteImage(filename) {
+    if (!confirm('이 사진을 목록에서 삭제할까요?')) return;
+    loadingOverlay.classList.remove('hidden');
+    try {
+        const response = await apiFetch('/api/delete_image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_str: currentPostData.date_str, filename })
+        });
+        if (!response.ok) {
+            throw new Error(`서버 에러 (상태 코드: ${response.status})`);
+        }
+        const data = await response.json();
+        if (data.success) {
+            renderSlidesPreview(data.image_urls);
+            resetReelButton();
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`사진 삭제 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
 // Helper to render slides in grid
 function renderSlidesPreview(imageUrls) {
+    currentImageUrls = imageUrls.slice();
     slidesGrid.innerHTML = '';
     imageUrls.forEach((url, index) => {
+        const filename = url.split('/').pop().split('?')[0];
+        const isExtra = filename.startsWith('extra_');
+
         const wrapper = document.createElement('div');
         wrapper.className = 'slide-preview-wrapper';
         wrapper.style.cursor = 'pointer';
-        
+        wrapper.style.position = 'relative';
+
         const img = document.createElement('img');
         img.src = url + '?t=' + Date.now();
         img.alt = `Slide ${index + 1}`;
-        
+
         const badge = document.createElement('div');
         badge.className = 'slide-number';
         badge.textContent = index + 1;
-        
+
         wrapper.appendChild(img);
         wrapper.appendChild(badge);
-        
-        // Click to open preview modal
+
+        // User-inserted photos get a label and a delete button.
+        if (isExtra) {
+            const tag = document.createElement('div');
+            tag.className = 'slide-extra-tag';
+            tag.textContent = '내 사진';
+            wrapper.appendChild(tag);
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'slide-del-btn';
+            del.textContent = '×';
+            del.title = '이 사진 삭제';
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteImage(filename);
+            });
+            wrapper.appendChild(del);
+        }
+
+        // "Insert a photo after this card" button.
+        const ins = document.createElement('button');
+        ins.type = 'button';
+        ins.className = 'slide-insert-btn';
+        ins.textContent = '＋ 사진';
+        ins.title = '이 카드 뒤에 사진 삽입';
+        ins.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerInsertAt(index + 1);
+        });
+        wrapper.appendChild(ins);
+
+        // Click image to open preview modal
         wrapper.addEventListener('click', () => {
             const modal = document.getElementById('image-modal');
             const modalImg = document.getElementById('modal-img');
             modal.classList.remove('hidden');
             modalImg.src = url + '?t=' + Date.now();
         });
-        
+
         slidesGrid.appendChild(wrapper);
     });
 }
@@ -427,6 +551,12 @@ window.addEventListener('DOMContentLoaded', () => {
     if (captionText) {
         captionText.readOnly = false;
         captionText.removeAttribute('readonly');
+    }
+
+    // "Insert photo at the very front" button.
+    const insertFrontBtn = document.getElementById('insert-front-btn');
+    if (insertFrontBtn) {
+        insertFrontBtn.addEventListener('click', () => triggerInsertAt(0));
     }
     
     // Modal Close Handlers

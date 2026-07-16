@@ -587,6 +587,20 @@ def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -
 
     return resized_img.crop((left, top, right, bottom))
 
+def save_uploaded_image_as_slide(file_bytes: bytes, output_dir: str, filename: str) -> str:
+    """
+    Normalizes a user-uploaded photo to the 4:5 card size (center-crop cover,
+    1080x1350) and saves it as a JPEG so it blends in with the generated cards.
+    Returns the saved file path.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    img = Image.open(BytesIO(file_bytes)).convert("RGB")
+    img = resize_to_cover(img, WIDTH, HEIGHT)
+    filepath = os.path.join(output_dir, filename)
+    img.save(filepath, "JPEG", quality=95)
+    print(f"Saved uploaded image as slide: {filepath}")
+    return filepath
+
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange") -> Image.Image:
     """
     Generates a single 4:5 image slide based on its content and type.

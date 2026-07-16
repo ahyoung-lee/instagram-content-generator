@@ -268,6 +268,82 @@ body {
     align-items: center;
 }
 
+/* Insert-photo hint + leading button */
+.insert-hint {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin: -6px 0 12px;
+    line-height: 1.5;
+}
+
+.insert-lead {
+    margin-bottom: 14px;
+}
+
+/* Per-card "insert a photo after this card" button */
+.slide-insert-btn {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease, background 0.2s ease;
+    white-space: nowrap;
+}
+
+.slide-preview-wrapper:hover .slide-insert-btn {
+    opacity: 1;
+}
+
+.slide-insert-btn:hover {
+    background: var(--key-color);
+}
+
+/* "My photo" tag + delete button on inserted photos */
+.slide-extra-tag {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: var(--key-color);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.slide-del-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    background: rgba(220, 38, 38, 0.85);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.slide-preview-wrapper:hover .slide-del-btn {
+    opacity: 1;
+}
+
 /* Caption Field */
 .caption-container textarea {
     width: 100%;
