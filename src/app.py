@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -13,6 +13,25 @@ from src.script_vision import generate_carousel_images
 from src.script_instagram import publish_to_instagram
 
 app = FastAPI(title="Instagram Monetization Automation Dashboard (IMAD) API")
+
+# Presenter-only access key. When ACCESS_KEY is set (e.g. on Render), the
+# costly API endpoints require a matching "X-Access-Key" header so that only
+# the presenter can trigger paid generation. If it is empty/unset, the API
+# stays open (convenient for local development).
+ACCESS_KEY = os.getenv("ACCESS_KEY", "").strip()
+
+def verify_access(x_access_key: Optional[str]):
+    """Rejects the request unless the caller supplied the correct access key.
+
+    No-op when ACCESS_KEY is not configured, keeping local dev frictionless.
+    """
+    if not ACCESS_KEY:
+        return
+    if not x_access_key or x_access_key != ACCESS_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="접근 권한이 없습니다. 발표자 전용 액세스 키가 필요합니다.",
+        )
 
 # Configure CORS to allow frontend communication
 app.add_middleware(
@@ -50,7 +69,8 @@ SAVE_DIR = os.path.join(BASE_DIR, "save")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 @app.post("/api/generate")
-def api_generate(payload: GenerateRequest):
+def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(default=None)):
+    verify_access(x_access_key)
     try:
         import hashlib
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -146,7 +166,8 @@ def api_generate(payload: GenerateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/publish")
-def api_publish(payload: PublishRequest):
+def api_publish(payload: PublishRequest, x_access_key: Optional[str] = Header(default=None)):
+    verify_access(x_access_key)
     try:
         post_dir = os.path.join(SAVE_DIR, payload.date_str)
         
@@ -195,7 +216,8 @@ def api_publish(payload: PublishRequest):
         print(f"Publishing error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 @app.post("/api/update_title")
-def api_update_title(payload: UpdateTitleRequest):
+def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = Header(default=None)):
+    verify_access(x_access_key)
     try:
         post_dir = os.path.join(SAVE_DIR, payload.date_str)
         plan_file = os.path.join(post_dir, "plan.json")
@@ -248,7 +270,8 @@ def api_update_title(payload: UpdateTitleRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/prepare_download")
-def api_prepare_download(payload: PrepareDownloadRequest):
+def api_prepare_download(payload: PrepareDownloadRequest, x_access_key: Optional[str] = Header(default=None)):
+    verify_access(x_access_key)
     try:
         post_dir = os.path.join(SAVE_DIR, payload.date_str)
         plan_file = os.path.join(post_dir, "plan.json")
@@ -294,11 +317,12 @@ def api_prepare_download(payload: PrepareDownloadRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/create_reel")
-def api_create_reel(payload: CreateReelRequest):
+def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = Header(default=None)):
     """
     Stitches the already-generated card images for a post into an
     Instagram-Reels-ready MP4 (1080x1920, cross-fade between cards).
     """
+    verify_access(x_access_key)
     try:
         import glob
         post_dir = os.path.join(SAVE_DIR, payload.date_str)

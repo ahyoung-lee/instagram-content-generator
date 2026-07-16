@@ -53,6 +53,57 @@ function rotateBackground() {
     document.body.style.setProperty('--bg-image', `url('${nextImage}')`);
 }
 
+// --- Presenter Access Key ---
+// Paid endpoints require an "X-Access-Key" header that only the presenter has.
+// The presenter opens the site once as `.../?key=YOUR_KEY`; the key is saved to
+// this browser and stripped from the visible URL. Visitors without the key are
+// prompted, and cannot generate unless they know it.
+const ACCESS_KEY_STORAGE = 'presenter_access_key';
+
+function getStoredAccessKey() {
+    return localStorage.getItem(ACCESS_KEY_STORAGE) || '';
+}
+
+function setStoredAccessKey(key) {
+    if (key) localStorage.setItem(ACCESS_KEY_STORAGE, key);
+}
+
+// Capture `?key=` from the URL (presenter convenience), then remove it from the
+// address bar so it isn't shown on screen or left in history during the demo.
+function captureAccessKeyFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get('key');
+    if (key) {
+        setStoredAccessKey(key);
+        params.delete('key');
+        const clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+        window.history.replaceState({}, document.title, clean);
+    }
+}
+
+// Returns the saved password, or prompts for it the first time and remembers it.
+function ensureAccessKey() {
+    let key = getStoredAccessKey();
+    if (!key) {
+        key = (prompt('생성하려면 비밀번호를 입력하세요:') || '').trim();
+        setStoredAccessKey(key);
+    }
+    return key;
+}
+
+// fetch wrapper that attaches the access key and surfaces a clear 401 message.
+async function apiFetch(url, options = {}) {
+    const key = ensureAccessKey();
+    const headers = Object.assign({}, options.headers, { 'X-Access-Key': key });
+    const response = await fetch(url, Object.assign({}, options, { headers }));
+    if (response.status === 401) {
+        // Wrong/empty key: forget it so the next attempt can re-prompt.
+        localStorage.removeItem(ACCESS_KEY_STORAGE);
+        throw new Error('접근 권한이 없습니다. 발표자 전용 액세스 키가 필요합니다.');
+    }
+    return response;
+}
+
 // --- API Orchestration & UI Control ---
 
 const urlInput = document.getElementById('url-input');
@@ -112,13 +163,19 @@ function renderSlidesPreview(imageUrls) {
 // 1. Generate Content
 generateBtn.addEventListener('click', async () => {
     const url = urlInput.value.strip ? urlInput.value.strip() : urlInput.value.trim();
-    
+
+    // Ask for the password first (only the first time), before any loading UI.
+    if (!ensureAccessKey()) {
+        alert('비밀번호를 입력해야 생성할 수 있습니다.');
+        return;
+    }
+
     // Show Loading Overlay
     loadingOverlay.classList.remove('hidden');
     resultsSection.classList.add('hidden');
 
     try {
-        const response = await fetch('/api/generate', {
+        const response = await apiFetch('/api/generate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -209,7 +266,7 @@ updateTitleBtn.addEventListener('click', async () => {
     loadingOverlay.classList.remove('hidden');
 
     try {
-        const response = await fetch('/api/update_title', {
+        const response = await apiFetch('/api/update_title', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -264,7 +321,7 @@ saveBtn.addEventListener('click', async (e) => {
     saveBtn.innerHTML = '⏳ 다운로드 준비 중...';
 
     try {
-        const response = await fetch('/api/prepare_download', {
+        const response = await apiFetch('/api/prepare_download', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -325,7 +382,7 @@ reelBtn.addEventListener('click', async () => {
     loadingOverlay.classList.remove('hidden');
 
     try {
-        const response = await fetch('/api/create_reel', {
+        const response = await apiFetch('/api/create_reel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date_str: currentPostData.date_str })
@@ -360,6 +417,9 @@ reelBtn.addEventListener('click', async () => {
 
 // Initialize backgrounds on load
 window.addEventListener('DOMContentLoaded', () => {
+    // Capture the presenter access key from `?key=` before anything else.
+    captureAccessKeyFromUrl();
+
     initializeBackgroundRotation();
     
     // Explicitly make sure caption text area is editable
