@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form
@@ -74,8 +75,9 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 
 # --- Slide ordering ("sequence") helpers ---
 # A post's card order is stored as plan.json["sequence"], an ordered list of
-# filenames in the post folder. It mixes AI-generated cards (slide_XX.jpg) with
-# user-inserted photos (extra_*.jpg) so downloads and reels honor the exact order.
+# filenames in the post folder, so downloads and reels honor the exact order.
+# It holds the AI cards (slide_XX.jpg) plus any standalone photos (extra_*.jpg)
+# left over from posts made before photos became part of a card.
 
 def _plan_path(post_dir: str) -> str:
     return os.path.join(post_dir, "plan.json")
@@ -105,6 +107,51 @@ def _ordered_paths(post_dir: str, data: dict) -> List[str]:
 
 def _urls_from_sequence(date_str: str, sequence: List[str]) -> List[str]:
     return [f"/save/{date_str}/{name}" for name in sequence]
+
+# --- Per-card user photos ---
+# A user photo is not its own slide: it is stored as plan["slides"][i]["user_photo"]
+# and drawn across the top of that card, with the card's copy shrunk underneath.
+
+def _page_from_slide_name(name: str) -> int:
+    """"slide_02.jpg" -> 2. Raises a 400 for anything that isn't a generated card."""
+    match = re.match(r"^slide_(\d+)\.jpg$", os.path.basename(name or ""))
+    if not match:
+        raise HTTPException(status_code=400, detail="생성된 카드에만 사진을 넣을 수 있습니다.")
+    return int(match.group(1))
+
+def _find_slide(data: dict, page: int) -> Optional[dict]:
+    for slide in data.get("plan", {}).get("slides", []):
+        if int(slide.get("page", 0)) == page:
+            return slide
+    return None
+
+def _photo_slides(data: dict) -> List[str]:
+    """Filenames of the cards that currently carry a user photo (for the UI)."""
+    return [
+        f"slide_{int(slide.get('page', 0)):02d}.jpg"
+        for slide in data.get("plan", {}).get("slides", [])
+        if slide.get("user_photo")
+    ]
+
+def _rerender_response(date_str: str, post_dir: str, data: dict) -> dict:
+    """
+    Re-draws every card from the stored plan and returns the refreshed carousel.
+    Reuses background_master.png, so this never calls the paid image API.
+    """
+    generate_carousel_images(
+        data["plan"],
+        post_dir,
+        reuse_background=True,
+        article_title=data.get("title"),
+        allow_paid_background=False,
+    )
+    sequence = _get_sequence(post_dir, data)
+    return {
+        "success": True,
+        "image_urls": _urls_from_sequence(date_str, sequence),
+        "sequence": sequence,
+        "photo_slides": _photo_slides(data),
+    }
 
 @app.post("/api/generate")
 def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(default=None)):
@@ -198,7 +245,8 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
             "image_urls": relative_image_urls,
             "date_str": f"{date_str}/{url_hash}",
             "absolute_paths": generated_files,
-            "zip_url": relative_zip_url
+            "zip_url": relative_zip_url,
+            "photo_slides": []  # a fresh post has no user photos attached yet
         }
         
     except Exception as e:
@@ -210,14 +258,14 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
 @app.post("/api/insert_image")
 async def api_insert_image(
     date_str: str = Form(...),
-    position: int = Form(...),
+    target: str = Form(...),
     file: UploadFile = File(...),
     x_access_key: Optional[str] = Header(default=None),
 ):
     """
-    Inserts a user-uploaded photo into the carousel at the given position.
-    The photo is normalized to the 4:5 card size and spliced into the post's
-    sequence so downloads and reels include it in order.
+    Attaches a user-uploaded photo to one generated card (`target`, e.g.
+    "slide_02.jpg"). The photo is drawn across the top of that card and the
+    card's copy shrinks and moves below it, so no extra slide is added.
     """
     verify_access(x_access_key)
     try:
@@ -234,25 +282,21 @@ async def api_insert_image(
             raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
         data = _load_plan_data(post_dir)
-        sequence = _get_sequence(post_dir, data)
+        page = _page_from_slide_name(target)
+        slide = _find_slide(data, page)
+        if slide is None:
+            raise HTTPException(status_code=400, detail="사진을 넣을 카드를 찾을 수 없습니다.")
+        if slide.get("type") == "cover":
+            raise HTTPException(status_code=400, detail="표지에는 사진을 넣을 수 없습니다.")
 
-        # Save the normalized photo under a unique extra_* name.
-        import time
-        from src.script_vision import save_uploaded_image_as_slide
-        new_name = f"extra_{int(time.time() * 1000)}.jpg"
-        save_uploaded_image_as_slide(contents, post_dir, new_name)
-
-        # Splice it in at the requested position (clamped to valid range).
-        pos = max(0, min(int(position), len(sequence)))
-        sequence.insert(pos, new_name)
-        data["sequence"] = sequence
+        # One photo per card: a re-upload overwrites the previous file.
+        from src.script_vision import save_uploaded_photo
+        photo_name = f"photo_{page:02d}.jpg"
+        save_uploaded_photo(contents, post_dir, photo_name)
+        slide["user_photo"] = photo_name
         _save_plan_data(post_dir, data)
 
-        return {
-            "success": True,
-            "image_urls": _urls_from_sequence(date_str, sequence),
-            "sequence": sequence,
-        }
+        return _rerender_response(date_str, post_dir, data)
     except HTTPException:
         raise
     except Exception as e:
@@ -263,9 +307,9 @@ async def api_insert_image(
 @app.post("/api/delete_image")
 def api_delete_image(payload: DeleteImageRequest, x_access_key: Optional[str] = Header(default=None)):
     """
-    Removes an image from the carousel order. User-inserted photos (extra_*)
-    are also deleted from disk; AI cards are only removed from the sequence so
-    they can be restored by a re-render.
+    Removes an image from the carousel order. Standalone photos inserted by older
+    versions (extra_*) are also deleted from disk; AI cards are only removed from
+    the sequence so they can be restored by a re-render.
     """
     verify_access(x_access_key)
     try:
@@ -279,7 +323,7 @@ def api_delete_image(payload: DeleteImageRequest, x_access_key: Optional[str] = 
         data["sequence"] = sequence
         _save_plan_data(post_dir, data)
 
-        # Physically remove user-inserted photos only.
+        # Physically remove standalone user photos only.
         if name.startswith("extra_"):
             try:
                 os.remove(os.path.join(post_dir, name))
@@ -290,12 +334,46 @@ def api_delete_image(payload: DeleteImageRequest, x_access_key: Optional[str] = 
             "success": True,
             "image_urls": _urls_from_sequence(payload.date_str, sequence),
             "sequence": sequence,
+            "photo_slides": _photo_slides(data),
         }
     except HTTPException:
         raise
     except Exception as e:
         import traceback
         print(f"Delete image error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/remove_photo")
+def api_remove_photo(payload: DeleteImageRequest, x_access_key: Optional[str] = Header(default=None)):
+    """
+    Detaches the user photo from a card ("slide_02.jpg") and redraws it, so the
+    card goes back to the full-size copy layout.
+    """
+    verify_access(x_access_key)
+    try:
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        data = _load_plan_data(post_dir)
+        page = _page_from_slide_name(payload.filename)
+        slide = _find_slide(data, page)
+        if slide is None or not slide.get("user_photo"):
+            raise HTTPException(status_code=400, detail="이 카드에는 삽입된 사진이 없습니다.")
+
+        photo_name = os.path.basename(slide.pop("user_photo"))
+        _save_plan_data(post_dir, data)
+        try:
+            os.remove(os.path.join(post_dir, photo_name))
+        except OSError:
+            pass
+
+        return _rerender_response(payload.date_str, post_dir, data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Remove photo error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/publish")
@@ -395,7 +473,8 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
             "success": True,
             "image_urls": relative_image_urls,
             "zip_url": relative_zip_url,
-            "absolute_paths": generated_files
+            "absolute_paths": generated_files,
+            "photo_slides": _photo_slides(plan_data)
         }
     except Exception as e:
         import traceback

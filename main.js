@@ -166,9 +166,12 @@ function resetReelButton() {
     }
 }
 
-// --- Insert / delete user photos in the carousel ---
+// --- Attach / remove a user photo on a card ---
+// A photo is not its own slide: it is drawn across the top of the card you pick,
+// and that card's copy shrinks and moves underneath it.
 let currentImageUrls = [];
-let pendingInsertPosition = null;
+let currentPhotoSlides = [];   // filenames of cards that already carry a photo
+let pendingPhotoTarget = null; // filename of the card awaiting a file pick
 let hiddenFileInput = null;
 
 // A single reusable hidden file picker for photo insertion.
@@ -182,31 +185,31 @@ function getHiddenFileInput() {
         hiddenFileInput.addEventListener('change', async (e) => {
             const file = e.target.files && e.target.files[0];
             e.target.value = ''; // allow re-selecting the same file next time
-            if (file && pendingInsertPosition !== null) {
-                await insertImageAt(pendingInsertPosition, file);
+            if (file && pendingPhotoTarget !== null) {
+                await attachPhotoTo(pendingPhotoTarget, file);
             }
-            pendingInsertPosition = null;
+            pendingPhotoTarget = null;
         });
     }
     return hiddenFileInput;
 }
 
-// Opens the file picker; the chosen photo is inserted at `position`.
-function triggerInsertAt(position) {
+// Opens the file picker; the chosen photo goes on top of card `filename`.
+function triggerPhotoFor(filename) {
     if (!currentPostData.date_str) {
         alert('먼저 콘텐츠를 생성해 주세요.');
         return;
     }
-    pendingInsertPosition = position;
+    pendingPhotoTarget = filename;
     getHiddenFileInput().click();
 }
 
-async function insertImageAt(position, file) {
+async function attachPhotoTo(filename, file) {
     loadingOverlay.classList.remove('hidden');
     try {
         const form = new FormData();
         form.append('date_str', currentPostData.date_str);
-        form.append('position', String(position));
+        form.append('target', filename);
         form.append('file', file);
 
         const response = await apiFetch('/api/insert_image', { method: 'POST', body: form });
@@ -217,8 +220,8 @@ async function insertImageAt(position, file) {
         }
         const data = await response.json();
         if (data.success) {
-            renderSlidesPreview(data.image_urls);
-            // Card order changed -> any previously built reel is now stale.
+            renderSlidesPreview(data.image_urls, data.photo_slides);
+            // The card artwork changed -> any previously built reel is now stale.
             resetReelButton();
         }
     } catch (error) {
@@ -229,6 +232,35 @@ async function insertImageAt(position, file) {
     }
 }
 
+// Detaches the photo from a card; the card goes back to the full-size copy layout.
+async function removePhotoFrom(filename) {
+    if (!confirm('이 카드에서 사진을 뺄까요?')) return;
+    loadingOverlay.classList.remove('hidden');
+    try {
+        const response = await apiFetch('/api/remove_photo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_str: currentPostData.date_str, filename })
+        });
+        if (!response.ok) {
+            let msg = `서버 에러 (상태 코드: ${response.status})`;
+            try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+            throw new Error(msg);
+        }
+        const data = await response.json();
+        if (data.success) {
+            renderSlidesPreview(data.image_urls, data.photo_slides);
+            resetReelButton();
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`사진 삭제 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+// Legacy standalone photo cards (extra_*.jpg) from older posts can still be removed.
 async function deleteImage(filename) {
     if (!confirm('이 사진을 목록에서 삭제할까요?')) return;
     loadingOverlay.classList.remove('hidden');
@@ -243,7 +275,7 @@ async function deleteImage(filename) {
         }
         const data = await response.json();
         if (data.success) {
-            renderSlidesPreview(data.image_urls);
+            renderSlidesPreview(data.image_urls, data.photo_slides);
             resetReelButton();
         }
     } catch (error) {
@@ -255,12 +287,15 @@ async function deleteImage(filename) {
 }
 
 // Helper to render slides in grid
-function renderSlidesPreview(imageUrls) {
+function renderSlidesPreview(imageUrls, photoSlides) {
     currentImageUrls = imageUrls.slice();
+    currentPhotoSlides = Array.isArray(photoSlides) ? photoSlides.slice() : currentPhotoSlides;
     slidesGrid.innerHTML = '';
     imageUrls.forEach((url, index) => {
         const filename = url.split('/').pop().split('?')[0];
-        const isExtra = filename.startsWith('extra_');
+        const isExtra = filename.startsWith('extra_');   // standalone photo from an older post
+        const isCover = index === 0;                     // the cover keeps its full-bleed artwork
+        const hasPhoto = currentPhotoSlides.includes(filename);
 
         const wrapper = document.createElement('div');
         wrapper.className = 'slide-preview-wrapper';
@@ -278,7 +313,7 @@ function renderSlidesPreview(imageUrls) {
         wrapper.appendChild(img);
         wrapper.appendChild(badge);
 
-        // User-inserted photos get a label and a delete button.
+        // Legacy standalone photo cards get a label and a delete button.
         if (isExtra) {
             const tag = document.createElement('div');
             tag.className = 'slide-extra-tag';
@@ -297,17 +332,38 @@ function renderSlidesPreview(imageUrls) {
             wrapper.appendChild(del);
         }
 
-        // "Insert a photo after this card" button.
-        const ins = document.createElement('button');
-        ins.type = 'button';
-        ins.className = 'slide-insert-btn';
-        ins.textContent = '＋ 사진';
-        ins.title = '이 카드 뒤에 사진 삽입';
-        ins.addEventListener('click', (e) => {
-            e.stopPropagation();
-            triggerInsertAt(index + 1);
-        });
-        wrapper.appendChild(ins);
+        // Cards carrying a photo get a label and a button to take it back off.
+        if (hasPhoto) {
+            const tag = document.createElement('div');
+            tag.className = 'slide-extra-tag';
+            tag.textContent = '내 사진';
+            wrapper.appendChild(tag);
+
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'slide-del-btn';
+            del.textContent = '×';
+            del.title = '이 카드에서 사진 빼기';
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                removePhotoFrom(filename);
+            });
+            wrapper.appendChild(del);
+        }
+
+        // "Put a photo on top of this card" button (not on the cover or legacy photo cards).
+        if (!isExtra && !isCover) {
+            const ins = document.createElement('button');
+            ins.type = 'button';
+            ins.className = 'slide-insert-btn';
+            ins.textContent = hasPhoto ? '사진 교체' : '＋ 사진';
+            ins.title = '이 카드 상단에 사진 넣기';
+            ins.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerPhotoFor(filename);
+            });
+            wrapper.appendChild(ins);
+        }
 
         // Click image to open preview modal
         wrapper.addEventListener('click', () => {
@@ -366,9 +422,9 @@ generateBtn.addEventListener('click', async () => {
             
             // Set cover title input
             titleEditInput.value = data.title;
-            
+
             // Render Slide Images Preview
-            renderSlidesPreview(data.image_urls);
+            renderSlidesPreview(data.image_urls, data.photo_slides || []);
 
             // A freshly generated post has no reel yet
             resetReelButton();
@@ -450,7 +506,7 @@ updateTitleBtn.addEventListener('click', async () => {
             currentPostData.image_paths = data.absolute_paths;
 
             // Render Slide Images Preview
-            renderSlidesPreview(data.image_urls);
+            renderSlidesPreview(data.image_urls, data.photo_slides);
 
             // Images changed -> any previously built reel is now stale
             resetReelButton();
@@ -590,11 +646,6 @@ window.addEventListener('DOMContentLoaded', () => {
         captionText.removeAttribute('readonly');
     }
 
-    // "Insert photo at the very front" button.
-    const insertFrontBtn = document.getElementById('insert-front-btn');
-    if (insertFrontBtn) {
-        insertFrontBtn.addEventListener('click', () => triggerInsertAt(0));
-    }
     
     // Modal Close Handlers
     const imageModal = document.getElementById('image-modal');

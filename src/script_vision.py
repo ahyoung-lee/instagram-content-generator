@@ -3,6 +3,7 @@ import re
 import requests
 import urllib.parse
 from io import BytesIO
+from typing import Optional
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from dotenv import load_dotenv
@@ -443,7 +444,7 @@ def get_relative_luminance(image: Image.Image, box: tuple) -> float:
 def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
     """
     Loads 'img/alwaysgood_logo.png', resizes it to a suitable size,
-    adjusts its opacity, and pastes it in the bottom-left corner of the image.
+    adjusts its opacity, and pastes it in the top-left corner of the image.
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     workspace_root = os.path.dirname(current_dir)
@@ -476,10 +477,12 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
         a = a.point(lambda p: int(p * opacity))
         transparent_logo = Image.merge("RGBA", (r, g, b, a))
         
-        # Place in the bottom-LEFT corner with padding. On Reels the right side
-        # is covered by Instagram's action icons, so the logo goes left instead.
+        # Place in the top-LEFT corner with padding: the right side is covered by
+        # Instagram's action icons on Reels, and the bottom by the caption
+        # preview, so the top-left is the one corner that always stays visible.
+        # 160px tall at y=50 keeps it clear of the content card (starts at y=240).
         x = 50
-        y = HEIGHT - target_height - 50
+        y = 50
         
         # Paste with transparent mask
         image.paste(transparent_logo, (x, y), transparent_logo)
@@ -609,21 +612,57 @@ def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -
 
     return resized_img.crop((left, top, right, bottom))
 
-def save_uploaded_image_as_slide(file_bytes: bytes, output_dir: str, filename: str) -> str:
+def save_uploaded_photo(file_bytes: bytes, output_dir: str, filename: str) -> str:
     """
-    Normalizes a user-uploaded photo to the 4:5 card size (center-crop cover,
-    1080x1350) and saves it as a JPEG so it blends in with the generated cards.
-    Returns the saved file path.
+    Stores a user-uploaded photo for embedding at the top of a card. The photo is
+    kept uncropped (only downscaled if huge) because draw_card_layout center-crops
+    it to whatever band height that card's copy leaves free. Returns the path.
     """
     os.makedirs(output_dir, exist_ok=True)
     img = Image.open(BytesIO(file_bytes)).convert("RGB")
-    img = resize_to_cover(img, WIDTH, HEIGHT)
+
+    max_w = WIDTH * 2  # plenty of detail for a 920px-wide band, without bloating the post folder
+    if img.width > max_w:
+        try:
+            resample_filter = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample_filter = Image.ANTIALIAS
+        img = img.resize((max_w, int(img.height * (max_w / img.width))), resample_filter)
+
     filepath = os.path.join(output_dir, filename)
     img.save(filepath, "JPEG", quality=95)
-    print(f"Saved uploaded image as slide: {filepath}")
+    print(f"Saved uploaded photo: {filepath}")
     return filepath
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange") -> Image.Image:
+def resolve_user_photo(slide: dict, photo_dir: str) -> Optional[str]:
+    """Path of the photo attached to this slide, or None when there isn't one."""
+    name = (slide.get("user_photo") or "").strip()
+    if not name or not photo_dir:
+        return None
+    path = os.path.join(photo_dir, os.path.basename(name))
+    return path if os.path.exists(path) else None
+
+
+def paste_slide_photo(image: Image.Image, photo_path: str, x0: int, y0: int, x1: int,
+                      photo_h: int, radius: int = 35) -> None:
+    """
+    Draws a user photo across the top of the content card, center-cropped to fill
+    the card width. Only the top corners are rounded so the photo sits flush
+    against the card body holding the copy underneath.
+    """
+    box_w = x1 - x0
+    photo = resize_to_cover(Image.open(photo_path).convert("RGB"), box_w, photo_h)
+
+    mask = Image.new("L", (box_w, photo_h), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.rounded_rectangle([0, 0, box_w - 1, photo_h - 1], radius=radius, fill=255)
+    # Square off the bottom corners: they meet the text area, not the card edge.
+    mask_draw.rectangle([0, photo_h - radius - 1, box_w - 1, photo_h - 1], fill=255)
+
+    image.paste(photo, (x0, y0), mask)
+
+
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None) -> Image.Image:
     """
     Generates a single 4:5 image slide based on its content and type.
     Uses a premium glassmorphic card news layout structure for content/CTA,
@@ -730,11 +769,11 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
             y_cursor += line_height
             
-        # Draw teaser text at the bottom, to the RIGHT of the logo watermark
-        # (the logo now sits bottom-left, so the teaser shares that row beside it).
+        # Draw teaser text at the bottom. The logo moved to the top-left corner,
+        # so the teaser reclaims the full-width left margin used by the title.
         teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
         teaser_font = get_system_font(26)
-        draw.text((235, HEIGHT - 143), teaser_text, fill=key_color, font=teaser_font)
+        draw.text((80, HEIGHT - 143), teaser_text, fill=key_color, font=teaser_font)
         
     else:
         # Define layout dimensions for content/CTA cards
@@ -765,83 +804,31 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         image = Image.alpha_composite(image, card_overlay)
         draw = ImageDraw.Draw(image)
         
-        # Render slide page indicator inside the card (top-right corner)
         page_num = slide.get("page", 1)
-        page_text = f"{page_num} / {total_pages}"
-        page_font = get_system_font(26)
-        draw.text((WIDTH - 180, 285), page_text, fill=(180, 180, 180, 220), font=page_font)
-        
+
+        # A user-inserted photo, when present, fills the top of the card and the
+        # copy shrinks and moves underneath it. Without one the layout is
+        # unchanged: badge at the top of the card, copy centered in the body.
+        photo_path = resolve_user_photo(slide, photo_dir)
+        has_photo = photo_path is not None
+
+        # --- Build the text lines first: the photo gets whatever vertical room
+        #     the copy leaves over, so long copy is never squeezed out.
         if slide_type == "cta":
-            # Draw CTA page badge (Centered)
             badge_text = "THANK YOU"
-            badge_font = get_system_font(22, bold=True)
-            if hasattr(badge_font, "getbbox"):
-                bbox = badge_font.getbbox(badge_text)
-                text_w = bbox[2] - bbox[0]
-                text_h = bbox[3] - bbox[1]
-            else:
-                text_w = len(badge_text) * 11
-                text_h = 22
-            box_w = text_w + 60
-            x0 = (WIDTH - box_w) // 2
-            x1 = x0 + box_w
-            y0, y1 = 280, 325
-            
-            draw.rounded_rectangle([x0, y0, x1, y1], radius=15, fill=key_color)
-            text_x = x0 + (box_w - text_w) // 2
-            text_y = y0 + (y1 - y0 - text_h) // 2 - 2
-            draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
-            
-            content_font_bold = get_system_font(56, bold=True)
+            content_font_bold = get_system_font(42 if has_photo else 56, bold=True)
+            line_height = 64 if has_photo else 98
             main_text = slide.get("main_text", "")
             main_text, _ = strip_highlight_markers(main_text)
             main_text = remove_emojis(main_text)
-            lines = wrap_text(main_text, content_font_bold, WIDTH - 260)
-            
-            # Center text vertically inside the card body
-            line_height = 98
-            total_text_height = len(lines) * line_height
-            card_content_height = (HEIGHT - 220) - 360
-            y_cursor = 360 + (card_content_height - total_text_height) // 2
-            if y_cursor < 360:
-                y_cursor = 360
-                
-            for idx, line in enumerate(lines):
-                if hasattr(content_font_bold, "getbbox"):
-                    bbox = content_font_bold.getbbox(line)
-                    w = bbox[2] - bbox[0]
-                else:
-                    w = len(line) * 28
-                x_pos = (WIDTH - w) // 2
-                
-                # Make the text bold and key color
-                draw_text_safe(draw, (x_pos, y_cursor), line, fill=key_color, font=content_font_bold)
-                y_cursor += line_height
-
+            render_lines = [(line, content_font_bold, key_color)
+                            for line in wrap_text(main_text, content_font_bold, WIDTH - 260)]
         else:
-            # Standard Content Slide Layout
-            # Draw Key Point badge (Centered)
             badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-            badge_font = get_system_font(22, bold=True)
-            if hasattr(badge_font, "getbbox"):
-                bbox = badge_font.getbbox(badge_text)
-                text_w = bbox[2] - bbox[0]
-                text_h = bbox[3] - bbox[1]
-            else:
-                text_w = len(badge_text) * 11
-                text_h = 22
-            box_w = text_w + 60
-            x0 = (WIDTH - box_w) // 2
-            x1 = x0 + box_w
-            y0, y1 = 280, 325
-            
-            draw.rounded_rectangle([x0, y0, x1, y1], radius=15, fill=key_color)
-            text_x = x0 + (box_w - text_w) // 2
-            text_y = y0 + (y1 - y0 - text_h) // 2 - 2
-            draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
-            
-            content_font = get_system_font(52)
-            content_font_bold = get_system_font(52, bold=True)
+            body_size = 40 if has_photo else 52
+            content_font = get_system_font(body_size)
+            content_font_bold = get_system_font(body_size, bold=True)
+            line_height = 62 if has_photo else 84
             main_text = slide.get("main_text", "")
             main_text = remove_emojis(main_text)
             main_text = format_korean_line_breaks(main_text)
@@ -875,30 +862,67 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 for sub in wrap_text(clean, line_font, WIDTH - 260):
                     render_lines.append((sub, line_font, line_color))
 
-            # Center text vertically inside the card body, compressing line height
-            # if there are many lines so the text never overflows the card.
-            card_content_height = (HEIGHT - 220) - 360  # 770 px
-            line_height = 84
-            if render_lines and len(render_lines) * line_height > card_content_height:
-                line_height = max(58, card_content_height // len(render_lines))
+        # --- Place the photo, then the badge row, then the copy ---
+        BADGE_H = 45
+        badge_top = 280   # default badge row, just inside the card top
+        text_top = 360    # default copy start
 
-            total_text_height = len(render_lines) * line_height
-            y_cursor = 360 + (card_content_height - total_text_height) // 2
-            if y_cursor < 360:
-                y_cursor = 360
+        if has_photo:
+            # Reserve badge row + gap + copy + bottom padding; the photo takes the rest.
+            text_block = BADGE_H + 35 + len(render_lines) * line_height + 30
+            photo_h = max(340, min((card_y1 - card_y0) - text_block, 640))
+            paste_slide_photo(image, photo_path, card_x0, card_y0, card_x1, photo_h)
+            draw = ImageDraw.Draw(image)
+            badge_top = card_y0 + photo_h + 30
+            text_top = badge_top + BADGE_H + 35
 
-            for text, line_font, line_color in render_lines:
-                w = _text_width(line_font, text)
-                x_pos = (WIDTH - w) // 2
-                draw_text_safe(draw, (x_pos, y_cursor), text, fill=line_color, font=line_font)
-                y_cursor += line_height
-                
-    # Apply logo watermark to the bottom right corner (outside the card)
+        # Render slide page indicator on the badge row (right-aligned)
+        page_text = f"{page_num} / {total_pages}"
+        page_font = get_system_font(26)
+        draw.text((WIDTH - 180, badge_top + 5), page_text, fill=(180, 180, 180, 220), font=page_font)
+
+        # Draw the badge pill (centered)
+        badge_font = get_system_font(22, bold=True)
+        if hasattr(badge_font, "getbbox"):
+            bbox = badge_font.getbbox(badge_text)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+        else:
+            text_w = len(badge_text) * 11
+            text_h = 22
+        box_w = text_w + 60
+        x0 = (WIDTH - box_w) // 2
+        x1 = x0 + box_w
+        y0, y1 = badge_top, badge_top + BADGE_H
+
+        draw.rounded_rectangle([x0, y0, x1, y1], radius=15, fill=key_color)
+        text_x = x0 + (box_w - text_w) // 2
+        text_y = y0 + (y1 - y0 - text_h) // 2 - 2
+        draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
+
+        # Center the copy in the remaining card body, compressing line height if
+        # there are many lines so the text never overflows the card.
+        card_content_height = card_y1 - text_top
+        if render_lines and len(render_lines) * line_height > card_content_height:
+            line_height = max(46 if has_photo else 58, card_content_height // len(render_lines))
+
+        total_text_height = len(render_lines) * line_height
+        y_cursor = text_top + max(0, (card_content_height - total_text_height) // 2)
+
+        for text, line_font, line_color in render_lines:
+            w = _text_width(line_font, text)
+            x_pos = (WIDTH - w) // 2
+            draw_text_safe(draw, (x_pos, y_cursor), text, fill=line_color, font=line_font)
+            y_cursor += line_height
+
+
+    # Apply logo watermark to the top-left corner (outside the card)
     draw_logo_watermark(image)
-    
+
     return image
 
-def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None) -> list:
+def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None,
+                             allow_paid_background: bool = True) -> list:
     """
     Generates all slide images based on the plan and saves them to output_dir.
     Returns a list of generated file paths.
@@ -923,7 +947,12 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
             print(f"Failed to load existing master background: {e}. Generating new one.")
             bg_image = None
             
-    if bg_image is None:
+    if bg_image is None and not allow_paid_background:
+        # Editing an existing post (photo added/removed): never spend money on a
+        # new background. Missing master -> the theme gradient fallback is used.
+        print("No background master available; falling back to the theme gradient (no API call).")
+
+    if bg_image is None and allow_paid_background:
         # Generate DALL-E master background using the detailed image_prompt
         raw_bg = generate_dalle_background(image_prompt)
         if raw_bg is not None:
@@ -937,7 +966,8 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
-        img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title, theme=theme)
+        img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title,
+                               theme=theme, photo_dir=output_dir)
         
         filename = f"slide_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)

@@ -276,11 +276,7 @@ body {
     line-height: 1.5;
 }
 
-.insert-lead {
-    margin-bottom: 14px;
-}
-
-/* Per-card "insert a photo after this card" button */
+/* Per-card "put a photo on top of this card" button */
 .slide-insert-btn {
     position: absolute;
     bottom: 8px;
