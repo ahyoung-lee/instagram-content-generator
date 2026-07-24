@@ -500,23 +500,45 @@ def generate_dalle_background(prompt_text: str) -> Image.Image:
         print(f"Generating AI background via OpenAI for: '{prompt_text[:50]}...'")
         client = OpenAI(api_key=openai_key)
         
-        # Optimize prompt to generate a highly intuitive, direct visual concept matching the title keywords
+        # Optimize prompt to generate a highly intuitive, direct visual concept matching the title keywords.
+        # Style is photorealistic (objects / scenery / texture), never illustration: the cover reads as a
+        # real editorial photograph. Faces stay banned because AI faces look uncanny at card-news scale.
         is_english = prompt_text and any(c.isalpha() for c in prompt_text) and not any(ord(c) > 127 for c in prompt_text)
-        
+
+        # Shared style rules so both language branches produce the same photographic look.
+        PHOTO_STYLE = (
+            "Photorealistic editorial photograph, shot on a full-frame DSLR with a 50mm prime lens, "
+            "natural directional lighting, shallow depth of field, realistic materials and surface texture, "
+            "true-to-life colors, subtle film grain, high dynamic range, sharp focus on the main subject. "
+        )
+        # The cover title sits over a dark bottom gradient, so the lower third must stay visually quiet.
+        COMPOSITION = (
+            "Center the subject in the upper two thirds of the frame; keep the bottom third simple, "
+            "uncluttered and darker (plain surface, shadow, or soft bokeh) so overlaid text stays readable. "
+        )
+        NEGATIVES = (
+            "Strictly NO text, NO letters, NO words, NO numbers, NO label overlays, NO signatures, NO watermarks, "
+            "NO logos, NO human faces, NO people, NO illustration, NO cartoon, NO 3D render, NO CGI, "
+            "NO digital painting, NO vector art, NO flat design. "
+        )
+
         if is_english:
             prompt = (
                 f"{prompt_text}. "
-                "Premium high-quality visual aesthetics, center-focused composition, clean, minimalist and sophisticated. "
-                "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces, NO signatures, NO watermarks. "
-                "Suitable for a clean, modern Instagram card news background."
+                + PHOTO_STYLE
+                + COMPOSITION
+                + NEGATIVES
+                + "A premium, magazine-quality photo used as an Instagram card news background."
             )
         else:
             prompt = (
-                f"A highly intuitive, clear, and direct visual concept representing the key subject of: '{prompt_text}'. "
-                "This is a background for an Instagram post, so it must feature a central, iconic symbol or metaphor matching the keywords. "
-                "The image must be simple, centered, visually striking, with a clean and professional layout. "
-                "Strictly NO text, NO letters, NO words, NO label overlays, NO realistic human faces. "
-                "Modern premium digital illustration, with a clean color scheme matching the subject."
+                f"A real photograph that clearly and directly represents the key subject of: '{prompt_text}'. "
+                "Show it through concrete objects, scenery, architecture, or close-up texture that a "
+                "photographer could actually capture -- no symbolic drawings or icons. "
+                + PHOTO_STYLE
+                + COMPOSITION
+                + NEGATIVES
+                + "A premium, magazine-quality photo used as an Instagram card news background."
             )
         
         try:

@@ -47,7 +47,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
             }
         ],
         "final_caption": "AI 에이전트로 인스타그램 콘텐츠를 자동 생성하세요\n\n· 실시간 트렌드를 읽어 카드뉴스를 자동 제작\n· 최적화된 본문과 해시태그까지 한 번에 완성\n· 콘텐츠 기획 시간을 절반 이하로 단축\n\n· 제공 시점: 지금 바로 이용 가능\n· 비용: 무료\n· 공식사이트: 공식 홈페이지\n\n#인스타그램자동화 #AI마케팅 #콘텐츠제작 #부업추천",
-        "image_prompt": "A modern premium digital illustration of a sleek glowing artificial intelligence robot head, side profile, centered, minimalist dark studio background, cinematic lighting, gold and blue accents."
+        "image_prompt": "A photorealistic photograph of a modern laptop and smartphone on a dark walnut desk, soft window light from the side, shallow depth of field, realistic metal and glass texture, empty dark surface across the bottom third."
     }
 
     if not openai_key or "your_openai_api_key" in openai_key:
@@ -86,7 +86,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
    - 각 블록 사이에는 `\\n\\n`으로 여백을 줘서 가독성을 확보해. 전체 본문은 군더더기 없이 핵심만 담아 간결하게 유지하고, 별도의 마무리 CTA 문구는 넣지 마.
    - 본문 맨 마지막 줄에는 뉴스 기사의 핵심 키워드를 반영한 대표 해시태그를 딱 4개만 공백으로 구분해서 한 줄에 적어줘. 절대 4개를 초과하거나 미달하지 않도록 정확히 4개의 해시태그로 작성해줘.
 9. (매우 중요) 모든 슬라이드와 캡션(main_text, hooking_title, final_caption 등)에 이모지·이모티콘·특수 픽토그램을 절대 넣지 마. 오직 한글/숫자/기본 문장부호 텍스트만 사용해서 깔끔하고 정돈된 느낌으로 작성해줘. (단, 캡션 맨 끝의 해시태그는 예외)
-10. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 DALL-E 이미지용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 전체적인 배경 이미지로 사용될 것이므로, 절대 텍스트(글자), 워터마크, 서명, 지저분한 패턴, 세부 얼굴 묘사 등은 제외하고, 중심이 되는 주요 상징 오브젝트(예: 로봇, 뇌, 스마트폰, 돈, 차트 등)가 입체적이고 고급스럽게 묘사된 3D 렌더링 혹은 미래지향적인 프리미엄 일러스트 스타일로 작성해줘. 배경은 어둡고 깔끔한 스튜디오 조명 느낌을 권장해. (예시: "A premium 3D render of a futuristic glowing brain icon, cybernetic lines, centered on a clean dark gradient background, cinematic lighting, gold and blue highlights")
+10. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 이미지 생성용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 배경 이미지로 사용되며 **반드시 실사 사진(photorealistic photograph) 스타일**이어야 해. 일러스트, 3D 렌더링, CGI, 만화, 벡터 아트 같은 표현은 절대 쓰지 마. 실제 사진작가가 카메라로 찍을 수 있는 장면만 묘사해줘 — 구체적인 사물, 풍경, 건축물, 클로즈업 질감 위주로 쓰고, 상징적인 아이콘이나 그림은 쓰지 마. 텍스트(글자), 워터마크, 서명, 로고, 사람 얼굴과 인물은 절대 넣지 마. 주제를 대표하는 피사체를 화면 위쪽 2/3에 배치하고 아래쪽 1/3은 단순하고 어둡게 비워두라고 명시해줘 (그 위에 흰 제목 글씨가 올라가기 때문). (예시: "A photorealistic close-up photograph of stacked Korean won banknotes on a dark wooden desk, natural window light from the left, shallow depth of field, realistic paper texture, uncluttered dark shadow across the bottom third")
 11. 카드뉴스 강조 색상 테마(`theme`)는 시스템이 랜덤으로 배정하므로 네가 주제에 맞춰 고민할 필요는 없어. `theme` 값은 아무 값이나 넣어도 되고 생략해도 돼 (어차피 무시되고 랜덤 값으로 덮어써져).
 
 반드시 아래 JSON 스키마 구조의 유효한 JSON 객체로만 응답해야 해. 다른 부가적인 텍스트(예: ```json 등)는 제외해줘.
@@ -106,7 +106,7 @@ JSON 스키마:
     {{"page": 7, "type": "cta", "main_text": "여러분 생각은 어떠신가요?\\n이 정보를 필요한 친구에게 공유하세요♡"}}
   ],
   "final_caption": "핵심 메시지 한 방\\n\\n· 핵심 요점 1\\n· 핵심 요점 2\\n· 핵심 요점 3\\n\\n· 가격: 89,000원\\n· 판매처: 공식몰·쿠팡\\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4",
-  "image_prompt": "A premium detailed English prompt for DALL-E based on the selected keywords"
+  "image_prompt": "A detailed English prompt for a photorealistic photograph based on the selected keywords"
 }}
 """
 
@@ -170,7 +170,7 @@ JSON 스키마:
         fallback_copy["slides"][1]["main_text"] = f"기사 본문 내용 요약:\n{article_content[:50]}..."
         fallback_copy["slides"][2]["main_text"] = "트렌드 변화 속에서\n우리가 준비해야 할\n비즈니스 기회는 무엇일까요?"
         fallback_copy["final_caption"] = f"{article_title}\n\n· 지금 가장 주목받는 핵심 이슈 정리\n· 놓치면 안 되는 배경과 포인트\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석"
-        fallback_copy["image_prompt"] = f"A premium 3D digital illustration representing {article_title[:20]}, dark clean background, sleek glowing design, neon lighting, cinematic rendering."
+        fallback_copy["image_prompt"] = f"A photorealistic editorial photograph representing {article_title[:20]}, real objects and natural materials, soft directional daylight, shallow depth of field, dark uncluttered bottom third."
         fallback_copy["theme"] = random.choice(AVAILABLE_THEMES)
         return fallback_copy
 
