@@ -199,7 +199,12 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
         
         # Step 2: Use LLM agent to create structured slide copy and captions
         plan = generate_instagram_plan(title, content)
-        
+
+        # The post title is the AI's click-worthy rewrite of the headline, not the
+        # raw scraped one. The original is kept as source_title for reference.
+        source_title = title
+        title = (plan.get("hooking_title") or "").strip() or source_title
+
         # Step 4: Render 4:5 Pillow images
         generated_files = generate_carousel_images(plan, post_dir, reuse_background=reuse_background, article_title=title)
         
@@ -223,6 +228,7 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
             "requested_url": payload.url,
             "request_count": request_count,
             "title": title,
+            "source_title": source_title,
             "url": scraped_url,
             "plan": plan,
             "image_urls": relative_image_urls,
