@@ -11,7 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;400;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260710">
+    <link rel="stylesheet" href="style.css?v=20260727">
 </head>
 
 <body>
@@ -34,7 +34,16 @@
 
                 <div class="search-bar">
                     <input type="url" id="url-input" placeholder="URL here :)" aria-label="URL 입력">
+                    <button id="bg-upload-btn" class="btn-attach" type="button">📷 사진 첨부</button>
                     <button id="generate-btn" class="btn-primary">Generate</button>
+                </div>
+                <p class="attach-hint">사진을 첨부하면 그 사진으로 <b>배경 이미지</b>를 만듭니다. 첨부하지 않고 생성하면 기존처럼 AI가 배경을 알아서 만들어요.</p>
+
+                <div id="bg-file-row" class="bg-file-row hidden">
+                    <img id="bg-file-thumb" class="bg-file-thumb" alt="첨부한 배경 사진 미리보기">
+                    <span id="bg-file-name" class="bg-file-name"></span>
+                    <button id="bg-file-clear" class="bg-file-clear" type="button" title="첨부한 사진 빼기"
+                        aria-label="첨부한 사진 빼기">&times;</button>
                 </div>
             </section>
 
@@ -122,7 +131,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=20260710"></script>
+    <script src="main.js?v=20260727"></script>
 </body>
 
 </html>

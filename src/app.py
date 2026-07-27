@@ -44,9 +44,8 @@ app.add_middleware(
 )
 
 # Request Models
-class GenerateRequest(BaseModel):
-    url: Optional[str] = None
-
+# (/api/generate takes multipart form data instead of JSON, because it also
+#  accepts an optional background photo upload.)
 class PublishRequest(BaseModel):
     image_paths: List[str]
     caption: str
@@ -154,20 +153,43 @@ def _rerender_response(date_str: str, post_dir: str, data: dict) -> dict:
     }
 
 @app.post("/api/generate")
-def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(default=None)):
+async def api_generate(
+    url: Optional[str] = Form(default=None),
+    background: Optional[UploadFile] = File(default=None),
+    x_access_key: Optional[str] = Header(default=None),
+):
+    """
+    Builds a carousel for `url` (or today's trending topic when it is empty).
+
+    An optional `background` photo replaces the AI-generated cover artwork: the
+    uploaded image becomes this post's background master, so no paid image call
+    is made. Without a photo the background is generated as before.
+    """
     verify_access(x_access_key)
     try:
         import hashlib
         date_str = datetime.now().strftime("%Y-%m-%d")
-        
+
+        # An empty form field arrives as "" -> treat it the same as "no URL".
+        url = (url or "").strip() or None
+
+        # Read the attached photo (if any) before anything expensive happens.
+        custom_bg_bytes = None
+        if background is not None and (background.filename or "").strip():
+            if not (background.content_type or "").lower().startswith("image/"):
+                raise HTTPException(status_code=400, detail="이미지 파일만 첨부할 수 있습니다.")
+            custom_bg_bytes = await background.read()
+            if not custom_bg_bytes:
+                raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
         # Determine unique subfolder for this URL to isolate caching
-        url_normalized = (payload.url or "trending_rss").strip().lower().rstrip('/')
+        url_normalized = (url or "trending_rss").strip().lower().rstrip('/')
         url_hash = hashlib.md5(url_normalized.encode('utf-8')).hexdigest()[:12]
-        
+
         post_dir = os.path.join(SAVE_DIR, date_str, url_hash)
         os.makedirs(post_dir, exist_ok=True)
         plan_file = os.path.join(post_dir, "plan.json")
-        
+
         # Check if cache exists and matches the requested URL for background image reuse
         reuse_background = False
         request_count = 1
@@ -175,9 +197,9 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
             try:
                 with open(plan_file, "r", encoding="utf-8") as f:
                     cached_data = json.load(f)
-                
+
                 cached_req_url = cached_data.get("requested_url")
-                if cached_req_url == payload.url:
+                if cached_req_url == url:
                     prev_count = cached_data.get("request_count", 1)
                     request_count = prev_count + 1
                     
@@ -191,8 +213,16 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
             except Exception as cache_err:
                 print(f"Error reading cache plan.json for background check: {cache_err}")
 
+        # An attached photo becomes the background master and is always reused,
+        # which also bypasses the parity rule above (and the paid image API).
+        if custom_bg_bytes:
+            from src.script_vision import save_background_master
+            save_background_master(custom_bg_bytes, post_dir)
+            reuse_background = True
+            print("Using the uploaded photo as the background; skipping AI background generation.")
+
         # Step 1: Crawl URL or fallback to RSS trending topic
-        trend_result = get_article_text(payload.url)
+        trend_result = get_article_text(url)
         title = trend_result.get("title", "Trending")
         content = trend_result.get("content", "")
         scraped_url = trend_result.get("url", "N/A")
@@ -206,7 +236,13 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
         title = (plan.get("hooking_title") or "").strip() or source_title
 
         # Step 4: Render 4:5 Pillow images
-        generated_files = generate_carousel_images(plan, post_dir, reuse_background=reuse_background, article_title=title)
+        generated_files = generate_carousel_images(
+            plan,
+            post_dir,
+            reuse_background=reuse_background,
+            article_title=title,
+            allow_paid_background=not custom_bg_bytes,
+        )
         
         # Format paths relative to static /save mount for the frontend
         relative_image_urls = []
@@ -225,8 +261,9 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
 
         # Save to plan.json cache
         cache_content = {
-            "requested_url": payload.url,
+            "requested_url": url,
             "request_count": request_count,
+            "custom_background": bool(custom_bg_bytes),
             "title": title,
             "source_title": source_title,
             "url": scraped_url,
@@ -255,6 +292,8 @@ def api_generate(payload: GenerateRequest, x_access_key: Optional[str] = Header(
             "photo_slides": []  # a fresh post has no user photos attached yet
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()

@@ -634,6 +634,21 @@ def save_uploaded_photo(file_bytes: bytes, output_dir: str, filename: str) -> st
     print(f"Saved uploaded photo: {filepath}")
     return filepath
 
+def save_background_master(file_bytes: bytes, output_dir: str) -> str:
+    """
+    Stores a user-supplied photo as this post's background master, cropped to the
+    4:5 card size. Every card is then drawn over that photo instead of over an
+    AI-generated one, so attaching a photo also skips the paid image API call.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    img = Image.open(BytesIO(file_bytes)).convert("RGB")
+    cover = resize_to_cover(img, WIDTH, HEIGHT)
+
+    filepath = os.path.join(output_dir, "background_master.png")
+    cover.save(filepath, "PNG")
+    print(f"Saved user-supplied background master: {filepath}")
+    return filepath
+
 def resolve_user_photo(slide: dict, photo_dir: str) -> Optional[str]:
     """Path of the photo attached to this slide, or None when there isn't one."""
     name = (slide.get("user_photo") or "").strip()
@@ -814,10 +829,13 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
         # --- Build the text lines first: the photo gets whatever vertical room
         #     the copy leaves over, so long copy is never squeezed out.
+        # Type scale for cards 2..N. These are deliberately smaller than the
+        # cover: the cover has one short hook, while these cards carry several
+        # sentences, so smaller copy leaves more breathing room inside the card.
         if slide_type == "cta":
             badge_text = "THANK YOU"
-            content_font_bold = get_system_font(42 if has_photo else 56, bold=True)
-            line_height = 64 if has_photo else 98
+            content_font_bold = get_system_font(36 if has_photo else 46, bold=True)
+            line_height = 56 if has_photo else 80
             main_text = slide.get("main_text", "")
             main_text, _ = strip_highlight_markers(main_text)
             main_text = remove_emojis(main_text)
@@ -825,10 +843,10 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                             for line in wrap_text(main_text, content_font_bold, WIDTH - 260)]
         else:
             badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-            body_size = 40 if has_photo else 52
+            body_size = 34 if has_photo else 43
             content_font = get_system_font(body_size)
             content_font_bold = get_system_font(body_size, bold=True)
-            line_height = 62 if has_photo else 84
+            line_height = 54 if has_photo else 70
             main_text = slide.get("main_text", "")
             main_text = remove_emojis(main_text)
             main_text = format_korean_line_breaks(main_text)
@@ -904,7 +922,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # there are many lines so the text never overflows the card.
         card_content_height = card_y1 - text_top
         if render_lines and len(render_lines) * line_height > card_content_height:
-            line_height = max(46 if has_photo else 58, card_content_height // len(render_lines))
+            line_height = max(40 if has_photo else 50, card_content_height // len(render_lines))
 
         total_text_height = len(render_lines) * line_height
         y_cursor = text_top + max(0, (card_content_height - total_text_height) // 2)

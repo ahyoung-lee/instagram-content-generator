@@ -157,6 +157,62 @@ const saveBtn = document.getElementById('save-btn');
 const reelBtn = document.getElementById('reel-btn');
 const saveVideoBtn = document.getElementById('save-video-btn');
 
+// --- Background photo attached on the main screen ---
+// A photo picked here becomes the post's background image (used crisp on the
+// cover, blurred behind the other cards). With no photo attached, generation
+// works exactly as before and the AI creates the background.
+const bgUploadBtn = document.getElementById('bg-upload-btn');
+const bgFileRow = document.getElementById('bg-file-row');
+const bgFileThumb = document.getElementById('bg-file-thumb');
+const bgFileName = document.getElementById('bg-file-name');
+const bgFileClear = document.getElementById('bg-file-clear');
+
+let selectedBgFile = null;
+let bgFileInput = null;   // own picker, separate from the per-card photo one
+
+function getBgFileInput() {
+    if (!bgFileInput) {
+        bgFileInput = document.createElement('input');
+        bgFileInput.type = 'file';
+        bgFileInput.accept = 'image/*';
+        bgFileInput.style.display = 'none';
+        document.body.appendChild(bgFileInput);
+        bgFileInput.addEventListener('change', (e) => {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = ''; // allow re-picking the same file
+            if (file) setSelectedBgFile(file);
+        });
+    }
+    return bgFileInput;
+}
+
+// Shows/clears the "attached photo" row and keeps the button label in sync.
+function setSelectedBgFile(file) {
+    if (bgFileThumb && bgFileThumb.src.startsWith('blob:')) {
+        URL.revokeObjectURL(bgFileThumb.src);
+    }
+    selectedBgFile = file || null;
+
+    if (!selectedBgFile) {
+        if (bgFileThumb) bgFileThumb.removeAttribute('src');
+        if (bgFileRow) bgFileRow.classList.add('hidden');
+        if (bgUploadBtn) bgUploadBtn.textContent = '📷 사진 첨부';
+        return;
+    }
+
+    if (bgFileThumb) bgFileThumb.src = URL.createObjectURL(selectedBgFile);
+    if (bgFileName) bgFileName.textContent = selectedBgFile.name;
+    if (bgFileRow) bgFileRow.classList.remove('hidden');
+    if (bgUploadBtn) bgUploadBtn.textContent = '📷 사진 변경';
+}
+
+if (bgUploadBtn) {
+    bgUploadBtn.addEventListener('click', () => getBgFileInput().click());
+}
+if (bgFileClear) {
+    bgFileClear.addEventListener('click', () => setSelectedBgFile(null));
+}
+
 // Hide the "영상 저장" button (a previously built reel is stale once the
 // underlying card images change).
 function resetReelButton() {
@@ -392,16 +448,18 @@ generateBtn.addEventListener('click', async () => {
     resultsSection.classList.add('hidden');
 
     try {
-        const response = await apiFetch('/api/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url: url || null })
-        });
+        // Multipart, so the optional background photo can ride along with the URL.
+        // (No Content-Type header: the browser sets the multipart boundary.)
+        const form = new FormData();
+        form.append('url', url || '');
+        if (selectedBgFile) form.append('background', selectedBgFile);
+
+        const response = await apiFetch('/api/generate', { method: 'POST', body: form });
 
         if (!response.ok) {
-            throw new Error(`서버 에러 발생 (상태 코드: ${response.status})`);
+            let msg = `서버 에러 발생 (상태 코드: ${response.status})`;
+            try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+            throw new Error(msg);
         }
 
         const data = await response.json();

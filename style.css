@@ -147,6 +147,80 @@ body {
     background: rgba(255, 255, 255, 0.08);
 }
 
+/* Attach a photo to use as the generated background */
+.btn-attach {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-radius: 14px;
+    padding: 0 24px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-attach:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: var(--key-color);
+}
+
+.attach-hint {
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.bg-file-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    text-align: left;
+}
+
+.bg-file-thumb {
+    width: 46px;
+    height: 46px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.bg-file-name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bg-file-clear {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+}
+
+.bg-file-clear:hover {
+    background: rgba(255, 59, 48, 0.6);
+}
+
 /* Buttons */
 .btn-primary {
     background: var(--key-color);
@@ -651,6 +725,12 @@ body {
         width: 100%;
         padding: 16px;
         font-size: 1.1rem;
+    }
+
+    .btn-attach {
+        width: 100%;
+        padding: 16px;
+        font-size: 1rem;
     }
 
     .slides-grid {
