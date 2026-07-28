@@ -15,6 +15,93 @@ load_dotenv()
 WIDTH = 1080
 HEIGHT = 1350
 
+# Card canvases. "portrait" is the Instagram carousel card and its numbers are
+# exactly the ones this layout was tuned with. "landscape" redraws the same
+# content on a 16:9 frame for YouTube, so the video fills the screen instead of
+# sitting between blurred pillarbox bars. Every position the layout code needs
+# lives here, so the two shapes share one code path.
+CANVASES = {
+    "portrait": {
+        "size": (WIDTH, HEIGHT),
+        "margin": 80,
+        "watermark_pos": (50, 50),
+        "watermark_width": 160,
+        "bar_from_bottom": (35, 31),   # accent bar: top/bottom offsets from H
+        "cover": {
+            "grad_start": 500,
+            "page_pos": (900, 285),
+            "badge_box": (80, 650, 390, 695),
+            "badge_font": 22,
+            "title_top": 730,
+            "title_wrap": 920,
+            "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
+            "teaser_from_bottom": 143,
+            "teaser_clear": 150,
+            "teaser_font": 26,
+            "teaser_text": "옆으로 넘겨서 핵심 요약 보기 ▶",
+        },
+        "card": {
+            "box": (80, 240, 1000, 1130),
+            "wrap": 820,
+            "badge_top": 280,
+            "text_top": 360,
+            "page_pos_x": 900,
+            "body": 43, "line": 70,
+            "body_photo": 34, "line_photo": 54,
+            "cta": 46, "cta_line": 80,
+            "cta_photo": 36, "cta_line_photo": 56,
+            "photo_min": 340, "photo_max": 640,
+            "min_line": 50, "min_line_photo": 40,
+            "badge_h": 45,
+        },
+    },
+    "landscape": {
+        # 1920x1080 is YouTube's recommended long-form size. All text is drawn
+        # natively at this size, so it stays crisp when the video step scales
+        # the frame down to 1280x720.
+        "size": (1920, 1080),
+        "margin": 140,
+        "watermark_pos": (60, 55),
+        "watermark_width": 190,
+        "bar_from_bottom": (30, 26),
+        "cover": {
+            "grad_start": 340,
+            "page_pos": (1690, 150),
+            "badge_box": (140, 470, 470, 518),
+            "badge_font": 26,
+            "title_top": 560,
+            "title_wrap": 1250,
+            "title_steps": ((96, 128), (86, 116), (76, 102), (66, 90)),
+            "teaser_from_bottom": 118,
+            "teaser_clear": 130,
+            "teaser_font": 30,
+            # A video has nothing to swipe, so the Instagram prompt is replaced.
+            "teaser_text": "핵심 요약 이어서 보기 ▶",
+        },
+        "card": {
+            # Kept well inside the frame: a card spanning the full 1920 would
+            # push lines past a comfortable reading length.
+            "box": (300, 130, 1620, 930),
+            "wrap": 1100,
+            "badge_top": 175,
+            "text_top": 265,
+            "page_pos_x": 1690,
+            "body": 44, "line": 68,
+            "body_photo": 36, "line_photo": 56,
+            "cta": 50, "cta_line": 84,
+            "cta_photo": 40, "cta_line_photo": 62,
+            "photo_min": 220, "photo_max": 430,
+            "min_line": 48, "min_line_photo": 40,
+            "badge_h": 48,
+        },
+    },
+}
+DEFAULT_CANVAS = "portrait"
+
+
+def get_canvas(name: str) -> dict:
+    return CANVASES.get(name or DEFAULT_CANVAS, CANVASES[DEFAULT_CANVAS])
+
 # Color themes. The creative agent assigns a theme name at random (independent of
 # the article topic); the renderer maps it to a palette. Each theme defines the
 # key/accent color plus the gradient fallback used when no AI background image is available.
@@ -441,10 +528,12 @@ def get_relative_luminance(image: Image.Image, box: tuple) -> float:
     
     return 0.2126 * avg_r + 0.7152 * avg_g + 0.0722 * avg_b
 
-def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
+def draw_logo_watermark(image: Image.Image, opacity: float = 0.45,
+                        pos: tuple = (50, 50), target_width: int = 160):
     """
     Loads 'img/alwaysgood_logo.png', resizes it to a suitable size,
     adjusts its opacity, and pastes it in the top-left corner of the image.
+    `pos`/`target_width` scale it to whichever canvas is being drawn.
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     workspace_root = os.path.dirname(current_dir)
@@ -459,9 +548,8 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
             
     try:
         logo = Image.open(logo_path).convert("RGBA")
-        
+
         # Determine target watermark size (e.g., width 160px)
-        target_width = 160
         aspect_ratio = logo.height / logo.width
         target_height = int(target_width * aspect_ratio)
         
@@ -480,10 +568,9 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45):
         # Place in the top-LEFT corner with padding: the right side is covered by
         # Instagram's action icons on Reels, and the bottom by the caption
         # preview, so the top-left is the one corner that always stays visible.
-        # 160px tall at y=50 keeps it clear of the content card (starts at y=240).
-        x = 50
-        y = 50
-        
+        # It sits clear of the content card, which starts lower down.
+        x, y = pos
+
         # Paste with transparent mask
         image.paste(transparent_logo, (x, y), transparent_logo)
     except Exception as e:
@@ -677,17 +764,25 @@ def paste_slide_photo(image: Image.Image, photo_path: str, x0: int, y0: int, x1:
     image.paste(photo, (x0, y0), mask)
 
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None) -> Image.Image:
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS) -> Image.Image:
     """
-    Generates a single 4:5 image slide based on its content and type.
+    Generates a single image slide based on its content and type.
     Uses a premium glassmorphic card news layout structure for content/CTA,
     and a bold bottom-gradient layout for the cover to make the title pop.
     The accent/key color and gradient fallback are driven by the chosen theme.
+    `canvas` picks the shape: "portrait" (4:5 Instagram) or "landscape" (16:9
+    YouTube); the layout numbers for each live in CANVASES.
     """
     slide_type = slide.get("type", "content")
     theme_data = get_theme(theme)
     key_color = theme_data["key"]  # theme accent color
-    
+
+    spec = get_canvas(canvas)
+    W, H = spec["size"]
+    margin = spec["margin"]
+    cover_spec = spec["cover"]
+    card_spec = spec["card"]
+
     if bg_image is not None:
         # We make a copy of the pre-resized cover image
         image = bg_image.copy()
@@ -700,44 +795,45 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             # Apply Gaussian Blur to content slides
             image = image.filter(ImageFilter.GaussianBlur(15))
             # Draw standard transparent overlay for content slides
-            overlay = Image.new("RGBA", (WIDTH, HEIGHT), (10, 10, 15, 80)) # ~30% opacity
+            overlay = Image.new("RGBA", (W, H), (10, 10, 15, 80)) # ~30% opacity
             image = Image.alpha_composite(image, overlay)
         else:
             # For Cover Slide: Crisp background with bottom-up dark gradient shadow
-            gradient_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+            gradient_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             g_draw = ImageDraw.Draw(gradient_overlay)
-            start_y = 500
-            end_y = 1350
+            start_y = cover_spec["grad_start"]
+            end_y = H
             for y in range(start_y, end_y):
                 # Calculate alpha: linear transition from 0 to 240
                 alpha = int(240 * (y - start_y) / (end_y - start_y))
                 # Draw a horizontal line
-                g_draw.line([(0, y), (WIDTH, y)], fill=(10, 10, 15, alpha))
+                g_draw.line([(0, y), (W, y)], fill=(10, 10, 15, alpha))
             image = Image.alpha_composite(image, gradient_overlay)
     else:
         # Fallback to premium gradient (theme-tinted) if bg_image is None
         color_start = theme_data["grad_start"]
         color_end = theme_data["grad_end"]
-        image = draw_gradient_background(WIDTH, HEIGHT, color_start, color_end)
+        image = draw_gradient_background(W, H, color_start, color_end)
         if image.mode != "RGBA":
             image = image.convert("RGBA")
-            
+
         if slide_type == "cover":
             # Still apply the bottom gradient overlay for consistency on fallback
-            gradient_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+            gradient_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             g_draw = ImageDraw.Draw(gradient_overlay)
-            start_y = 500
-            end_y = 1350
+            start_y = cover_spec["grad_start"]
+            end_y = H
             for y in range(start_y, end_y):
                 alpha = int(220 * (y - start_y) / (end_y - start_y))
-                g_draw.line([(0, y), (WIDTH, y)], fill=(10, 10, 15, alpha))
+                g_draw.line([(0, y), (W, y)], fill=(10, 10, 15, alpha))
             image = Image.alpha_composite(image, gradient_overlay)
 
     draw = ImageDraw.Draw(image)
-    
+
     # Bottom key color brand accent bar (drawn on all pages)
-    draw.rectangle([80, HEIGHT - 35, WIDTH - 80, HEIGHT - 31], fill=key_color)
-    
+    bar_top, bar_bottom = spec["bar_from_bottom"]
+    draw.rectangle([margin, H - bar_top, W - margin, H - bar_bottom], fill=key_color)
+
     if slide_type == "cover":
         # Cover Page Layout (No card, text drawn directly on bottom gradient)
         
@@ -745,12 +841,13 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         page_num = slide.get("page", 1)
         page_text = f"{page_num} / {total_pages}"
         page_font = get_system_font(26)
-        draw.text((WIDTH - 180, 285), page_text, fill=(180, 180, 180, 220), font=page_font)
+        draw.text(cover_spec["page_pos"], page_text, fill=(180, 180, 180, 220), font=page_font)
 
         # Draw cover top badge
-        draw.rounded_rectangle([80, 650, 390, 695], radius=15, fill=key_color)
-        badge_font = get_system_font(22)
-        draw.text((110, 660), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
+        bx0, by0, bx1, by1 = cover_spec["badge_box"]
+        draw.rounded_rectangle([bx0, by0, bx1, by1], radius=15, fill=key_color)
+        badge_font = get_system_font(cover_spec["badge_font"])
+        draw.text((bx0 + 30, by0 + 10), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
         
         # Draw Main Title (Bold & Large)
         # Prefer the AI-generated cover hook (punchy, engaging) over the raw
@@ -766,37 +863,36 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # Fit the hook: start at a large size and step down if it wraps to many
         # lines, so the title never overflows into the teaser instead of being
         # hard-truncated with an ellipsis.
-        y_start = 730
-        teaser_top = HEIGHT - 150  # keep clear of the bottom teaser text
+        y_start = cover_spec["title_top"]
+        teaser_top = H - cover_spec["teaser_clear"]  # keep clear of the bottom teaser text
         title_font = None
         lines = []
-        for font_size, line_height in ((84, 110), (74, 98), (64, 86), (56, 76)):
+        for font_size, line_height in cover_spec["title_steps"]:
             title_font = get_system_font(font_size, bold=True)
-            lines = wrap_text(title_text, title_font, WIDTH - 160)
+            lines = wrap_text(title_text, title_font, cover_spec["title_wrap"])
             if y_start + len(lines) * line_height <= teaser_top:
                 break
 
         y_cursor = y_start
         for line in lines:
             # Draw a subtle drop shadow (semi-transparent dark gray) at (3, 3) offset
-            draw_text_safe(draw, (80 + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
+            draw_text_safe(draw, (margin + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
             # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
-            draw_text_safe(draw, (80, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
+            draw_text_safe(draw, (margin, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
             y_cursor += line_height
-            
+
         # Draw teaser text at the bottom. The logo moved to the top-left corner,
         # so the teaser reclaims the full-width left margin used by the title.
-        teaser_text = "옆으로 넘겨서 핵심 요약 보기 ▶"
-        teaser_font = get_system_font(26)
-        draw.text((80, HEIGHT - 143), teaser_text, fill=key_color, font=teaser_font)
+        teaser_text = cover_spec["teaser_text"]
+        teaser_font = get_system_font(cover_spec["teaser_font"])
+        draw.text((margin, H - cover_spec["teaser_from_bottom"]), teaser_text, fill=key_color, font=teaser_font)
         
     else:
         # Define layout dimensions for content/CTA cards
-        card_x0, card_y0 = 80, 240
-        card_x1, card_y1 = WIDTH - 80, HEIGHT - 220
-        
+        card_x0, card_y0, card_x1, card_y1 = card_spec["box"]
+
         # Create card overlay layer for premium glassmorphism
-        card_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        card_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         card_draw = ImageDraw.Draw(card_overlay)
         
         # Choose card fill and border color based on slide type
@@ -834,19 +930,20 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # sentences, so smaller copy leaves more breathing room inside the card.
         if slide_type == "cta":
             badge_text = "THANK YOU"
-            content_font_bold = get_system_font(36 if has_photo else 46, bold=True)
-            line_height = 56 if has_photo else 80
+            content_font_bold = get_system_font(
+                card_spec["cta_photo"] if has_photo else card_spec["cta"], bold=True)
+            line_height = card_spec["cta_line_photo"] if has_photo else card_spec["cta_line"]
             main_text = slide.get("main_text", "")
             main_text, _ = strip_highlight_markers(main_text)
             main_text = remove_emojis(main_text)
             render_lines = [(line, content_font_bold, key_color)
-                            for line in wrap_text(main_text, content_font_bold, WIDTH - 260)]
+                            for line in wrap_text(main_text, content_font_bold, card_spec["wrap"])]
         else:
             badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-            body_size = 34 if has_photo else 43
+            body_size = card_spec["body_photo"] if has_photo else card_spec["body"]
             content_font = get_system_font(body_size)
             content_font_bold = get_system_font(body_size, bold=True)
-            line_height = 54 if has_photo else 70
+            line_height = card_spec["line_photo"] if has_photo else card_spec["line"]
             main_text = slide.get("main_text", "")
             main_text = remove_emojis(main_text)
             main_text = format_korean_line_breaks(main_text)
@@ -877,18 +974,19 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
                 else:
                     line_font, line_color = content_font, body_color
 
-                for sub in wrap_text(clean, line_font, WIDTH - 260):
+                for sub in wrap_text(clean, line_font, card_spec["wrap"]):
                     render_lines.append((sub, line_font, line_color))
 
         # --- Place the photo, then the badge row, then the copy ---
-        BADGE_H = 45
-        badge_top = 280   # default badge row, just inside the card top
-        text_top = 360    # default copy start
+        BADGE_H = card_spec["badge_h"]
+        badge_top = card_spec["badge_top"]   # default badge row, just inside the card top
+        text_top = card_spec["text_top"]     # default copy start
 
         if has_photo:
             # Reserve badge row + gap + copy + bottom padding; the photo takes the rest.
             text_block = BADGE_H + 35 + len(render_lines) * line_height + 30
-            photo_h = max(340, min((card_y1 - card_y0) - text_block, 640))
+            photo_h = max(card_spec["photo_min"],
+                          min((card_y1 - card_y0) - text_block, card_spec["photo_max"]))
             paste_slide_photo(image, photo_path, card_x0, card_y0, card_x1, photo_h)
             draw = ImageDraw.Draw(image)
             badge_top = card_y0 + photo_h + 30
@@ -897,7 +995,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # Render slide page indicator on the badge row (right-aligned)
         page_text = f"{page_num} / {total_pages}"
         page_font = get_system_font(26)
-        draw.text((WIDTH - 180, badge_top + 5), page_text, fill=(180, 180, 180, 220), font=page_font)
+        draw.text((card_spec["page_pos_x"], badge_top + 5), page_text, fill=(180, 180, 180, 220), font=page_font)
 
         # Draw the badge pill (centered)
         badge_font = get_system_font(22, bold=True)
@@ -909,7 +1007,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             text_w = len(badge_text) * 11
             text_h = 22
         box_w = text_w + 60
-        x0 = (WIDTH - box_w) // 2
+        x0 = (W - box_w) // 2
         x1 = x0 + box_w
         y0, y1 = badge_top, badge_top + BADGE_H
 
@@ -922,30 +1020,38 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # there are many lines so the text never overflows the card.
         card_content_height = card_y1 - text_top
         if render_lines and len(render_lines) * line_height > card_content_height:
-            line_height = max(40 if has_photo else 50, card_content_height // len(render_lines))
+            min_line = card_spec["min_line_photo"] if has_photo else card_spec["min_line"]
+            line_height = max(min_line, card_content_height // len(render_lines))
 
         total_text_height = len(render_lines) * line_height
         y_cursor = text_top + max(0, (card_content_height - total_text_height) // 2)
 
         for text, line_font, line_color in render_lines:
             w = _text_width(line_font, text)
-            x_pos = (WIDTH - w) // 2
+            x_pos = (W - w) // 2
             draw_text_safe(draw, (x_pos, y_cursor), text, fill=line_color, font=line_font)
             y_cursor += line_height
 
 
     # Apply logo watermark to the top-left corner (outside the card)
-    draw_logo_watermark(image)
+    draw_logo_watermark(image, pos=spec["watermark_pos"], target_width=spec["watermark_width"])
 
     return image
 
 def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None,
-                             allow_paid_background: bool = True) -> list:
+                             allow_paid_background: bool = True, canvas: str = DEFAULT_CANVAS,
+                             filename_prefix: str = "slide") -> list:
     """
     Generates all slide images based on the plan and saves them to output_dir.
     Returns a list of generated file paths.
+
+    `canvas` selects the card shape ("portrait" for the 4:5 Instagram carousel,
+    "landscape" for 16:9 YouTube frames) and `filename_prefix` keeps the two
+    sets side by side in the same post folder.
     """
     os.makedirs(output_dir, exist_ok=True)
+    spec = get_canvas(canvas)
+    canvas_w, canvas_h = spec["size"]
     total_pages = plan.get("total_pages", 4)
     hooking_title = plan.get("hooking_title", "Trending")
     image_prompt = plan.get("image_prompt", hooking_title)
@@ -961,6 +1067,10 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
         try:
             bg_image = Image.open(master_bg_path)
             bg_image.load()
+            # The master is stored at the portrait size, so re-cover it for
+            # whichever canvas is being drawn (a no-op for portrait itself).
+            if bg_image.size != (canvas_w, canvas_h):
+                bg_image = resize_to_cover(bg_image, canvas_w, canvas_h)
         except Exception as e:
             print(f"Failed to load existing master background: {e}. Generating new one.")
             bg_image = None
@@ -974,20 +1084,24 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
         # Generate DALL-E master background using the detailed image_prompt
         raw_bg = generate_dalle_background(image_prompt)
         if raw_bg is not None:
+            # Always archive the master at the portrait size so a later
+            # landscape render can re-cover it without paying for a new image.
             bg_image = resize_to_cover(raw_bg, WIDTH, HEIGHT)
             try:
                 bg_image.save(master_bg_path, "PNG")
                 print(f"Saved background master image to: {master_bg_path}")
             except Exception as e:
                 print(f"Failed to save background master image: {e}")
-        
+            if (canvas_w, canvas_h) != (WIDTH, HEIGHT):
+                bg_image = resize_to_cover(raw_bg, canvas_w, canvas_h)
+
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
         img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title,
-                               theme=theme, photo_dir=output_dir)
-        
-        filename = f"slide_{page_num:02d}.jpg"
+                               theme=theme, photo_dir=output_dir, canvas=canvas)
+
+        filename = f"{filename_prefix}_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)
         
         # Save as JPEG (Quality: 95)

@@ -12,8 +12,11 @@ import imageio_ffmpeg
 # 720p-class frames (same pixel count either way) keep the libx264 encoder's
 # memory low enough to run on small hosts (Render free tier = 512MB).
 PRESETS = {
-    "vertical":   {"size": (720, 1280), "filename": "reel.mp4",      "label": "9:16"},
-    "horizontal": {"size": (1280, 720), "filename": "reel_wide.mp4", "label": "16:9"},
+    # `seconds` is how long each card is held. 2.5s was too quick to finish
+    # reading a card of Korean copy; YouTube gets a longer hold still, since
+    # viewers watch it rather than swiping past.
+    "vertical":   {"size": (720, 1280), "filename": "reel.mp4",      "label": "9:16", "seconds": 4.5},
+    "horizontal": {"size": (1280, 720), "filename": "reel_wide.mp4", "label": "16:9", "seconds": 7.0},
 }
 FPS = 30
 
@@ -73,19 +76,21 @@ def _compose_frame(card_path: str, frame_w: int, frame_h: int) -> Image.Image:
 
 
 def create_reel_video(image_paths: list, output_dir: str,
-                      seconds_per_card: float = 2.5, fade_seconds: float = 0.5,
+                      seconds_per_card: float = None, fade_seconds: float = 0.5,
                       orientation: str = "vertical") -> str:
     """
     Stitches the given card images into an H.264/yuv420p MP4 with a smooth
     cross-fade between cards. `orientation` picks the shape: "vertical" for a
     9:16 Instagram Reel, "horizontal" for a 16:9 YouTube video. Each card is
-    held for `seconds_per_card`, and consecutive cards blend over
-    `fade_seconds`. Returns the output file path.
+    held for `seconds_per_card` (defaulting to the orientation's own pace), and
+    consecutive cards blend over `fade_seconds`. Returns the output file path.
     """
     preset = PRESETS.get(orientation)
     if preset is None:
         raise ValueError(f"알 수 없는 영상 비율입니다: {orientation}")
     frame_w, frame_h = preset["size"]
+    if seconds_per_card is None:
+        seconds_per_card = preset["seconds"]
 
     os.makedirs(output_dir, exist_ok=True)
 
