@@ -516,17 +516,17 @@ body {
     box-shadow: 0 12px 30px rgba(220, 38, 38, 0.45);
 }
 
-/* "영상 저장" — distinct green accent, appears once the video is ready */
+/* "영상 저장" — neutral dark grey, appears once the video is ready */
 .btn-video {
-    background: #16a34a;
-    box-shadow: 0 8px 25px rgba(22, 163, 74, 0.3);
+    background: #374151;
+    box-shadow: 0 8px 25px rgba(55, 65, 81, 0.35);
     display: inline-flex;
     text-decoration: none;
 }
 
 .btn-video:hover {
-    background: #15803d;
-    box-shadow: 0 12px 30px rgba(22, 163, 74, 0.45);
+    background: #1f2937;
+    box-shadow: 0 12px 30px rgba(55, 65, 81, 0.5);
 }
 
 .btn-video.hidden {

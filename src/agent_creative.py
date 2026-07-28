@@ -11,6 +11,23 @@ load_dotenv()
 # (independent of the article topic) so the visual palette stays varied.
 AVAILABLE_THEMES = ["orange", "blue", "green", "purple", "pink", "teal", "yellow", "red"]
 
+# Hard ceiling on deck length: one cover + up to nine content cards.
+MAX_SLIDES = 10
+
+def _normalize_slides(plan: dict) -> dict:
+    """Drops the retired closing card, caps the deck at MAX_SLIDES and renumbers.
+
+    The carousel now ends on its last content card, so any 'cta' slide the model
+    still returns is removed here rather than rendered.
+    """
+    slides = [s for s in plan.get("slides", []) if s.get("type") != "cta"]
+    slides = slides[:MAX_SLIDES]
+    for page, slide in enumerate(slides, start=1):
+        slide["page"] = page
+    plan["slides"] = slides
+    plan["total_pages"] = len(slides)
+    return plan
+
 def generate_instagram_plan(article_title: str, article_content: str) -> dict:
     """
     Analyzes article content using OpenAI and generates an Instagram carousel plan.
@@ -21,7 +38,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
 
     # Fallback response if API key is missing or invalid
     fallback_response = {
-        "total_pages": 4,
+        "total_pages": 3,
         "theme": "orange",
         "hooking_title": "AI로 인스타 운영 자동화하는 충격적인 방법?!",
         "slides": [
@@ -39,11 +56,6 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
                 "page": 3,
                 "type": "content",
                 "main_text": "2. 카피 작성\n도파민을 자극하는 문구와\n**수익화 CTA까지 한 번에 완성**"
-            },
-            {
-                "page": 4,
-                "type": "cta",
-                "main_text": "여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡"
             }
         ],
         "final_caption": "콘텐츠 하나 만드는 데 몇 시간씩 쓰고 계신가요.\n기사 링크만 넣으면 카드뉴스가 통째로 나옵니다.\n본문과 해시태그까지 함께 완성돼요.\n\n· 실시간 트렌드를 읽어 카드뉴스를 자동 제작\n· 최적화된 본문과 해시태그까지 한 번에 완성\n· 콘텐츠 기획 시간을 절반 이하로 단축\n\n#인스타그램자동화 #AI마케팅 #콘텐츠제작 #부업추천",
@@ -70,33 +82,31 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
    - 20자 내외의 짧고 강한 문장으로, 신문 기사체("~해", "~밝혀", "~한다")가 아니라 독자에게 말 거는 구어체로 써줘.
    - 예시: "정부, 청년 월세 지원 확대 시행" -> "월세 20만원, 몰라서 못 받는 청년들"
 2. 기사 내용을 아주 꼼꼼하고 깊이 있게 정독하여 독자에게 실질적으로 가치 있는 정보와 요점을 빠짐없이 파악해야 해. 요식 행위 수준의 단순 나열이 아니라, 핵심 구체적 수치(날짜·금액·비율·순위 등), 원인·배경, 근거, 그리고 독자가 바로 써먹을 수 있는 실전 팁을 밀도 있게 정리해줘. 각 요점은 '무엇이(핵심 사실)'에 더해 '왜 중요한지 / 어떤 영향이 있는지'까지 한 단계 더 깊이 짚어줘. 추측성 정보나 기사에 없는 내용을 지어내지 말고, 반드시 기사 근거에 기반해서 작성해. 특히, 기사 내에 나열된 핵심 키포인트나 세부 기능/방법의 개수를 명확히 세어보고(예: 기사 제목이나 본문에 6가지 방법이 있다면), 그 개수 그대로 내용 슬라이드를 구성하여 누락되는 부분이 단 하나도 없게 해야 해.
-3. 기사 본문의 풍부함과 요점 개수(N개)에 맞게 카드뉴스 총 매수를 **최대 10장(권장: 6장 ~ 10장)**까지 충분히 할애하여 중요 정보가 누락되지 않도록 설계해줘. 예컨대 6가지 핵심 항목이 있다면 표지/마지막을 제외한 중간 내용('content' 타입) 슬라이드를 정확히 6개 생성해야 해.
+3. 기사 본문의 풍부함과 요점 개수(N개)에 맞게 카드뉴스 총 매수를 **최대 10장(권장: 6장 ~ 10장)**까지 충분히 할애하여 중요 정보가 누락되지 않도록 설계해줘. 총 매수는 '표지 1장 + content 슬라이드'로 구성되므로 content 슬라이드는 최대 9개까지 만들 수 있어. 예컨대 6가지 핵심 항목이 있다면 표지를 제외한 내용('content' 타입) 슬라이드를 정확히 6개 생성해야 해. 기사에 담긴 요점이 충분히 많다면 6개 미만으로 줄이지 말고 최대치에 가깝게 채워줘.
 4. 2번째 카드뉴스 내용부터 중간 페이지들('content' 타입)의 `main_text`는 반드시 아래 구조로 작성해줘:
    - 1번째 줄: "번호. 핵심 소제목" (예: "1. 실시간 트렌드 분석") — 요점의 제목. 12자 이내로 간결하게.
    - 2번째 줄부터: 그 요점의 구체적 설명(수치·사실·예시·팁 포함)을 담되, 한 슬라이드는 '하나의 핵심 요점'만 깊이 있게 다뤄줘. 군더더기 없이 핵심만 깔끔하게 정리해.
    - (매우 중요) 설명이 길면 의미 단위(구/절)로 `\n`을 직접 넣어 한 줄이 대략 16자 이내가 되도록 2~4줄로 자연스럽게 끊어줘. 조사(을/를/이/가/은/는/와/과/의/로)나 접속사(그리고/하지만 등)로 줄을 끝내지 마. 한 문장이 어색하게 잘리지 않도록 읽기 흐름에 맞게 끊는 게 핵심이야.
    - (매우 중요) 각 content 슬라이드에서 독자가 꼭 기억해야 할 '가장 핵심적인 문장 딱 1개'를 골라, 그 문장 전체(제목 줄 제외)를 `**문장**` 형태로 감싸줘. 이렇게 감싼 문장은 이미지에서 키컬러로 강조 표시돼. 예: "구독자가 **3개월 만에 2배 늘었어요**". 강조는 슬라이드당 1개만, 소제목(제목 줄)에는 절대 쓰지 마.
    - (매우 중요) 이모지나 이모티콘은 절대 사용하지 마. 모든 슬라이드는 이모지 없이 오직 텍스트만으로 깔끔하게 작성해줘.
-5. 카드뉴스의 첫 페이지는 'cover', 마지막 페이지는 'cta' 타입이어야 하고, 중간 페이지들은 'content' 타입이어야 해.
-6. 마지막 'cta' 페이지의 `main_text`는 다른 문장을 절대 섞지 말고, 반드시 정확히 아래의 2줄로만 고정해서 반환해줘 (매우 중요):
-여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡
-7. 동일한 기사 링크로 여러 번 요청될 수 있으니, 매번 텍스트 생성 시 이전 버전과 다른 깊이 있는 분석 각도나 새로운 유용한 디테일을 찾아 독창적이고 심도 있게 작성해줘.
-8. `final_caption`은 장황하게 늘어놓지 말고, 독자가 스크롤하며 3초 안에 핵심을 파악할 수 있도록 아래 구조로 밀도 있게 '핵심화'해서 작성해줘 (매우 중요):
+5. 카드뉴스의 첫 페이지는 'cover' 타입이고, 나머지 페이지는 전부 'content' 타입이어야 해. (매우 중요) 마지막을 장식하는 마무리·공유 유도 카드('cta' 타입)는 더 이상 만들지 마. 마지막 페이지도 반드시 기사 내용을 담은 'content' 슬라이드로 끝나야 해.
+6. 동일한 기사 링크로 여러 번 요청될 수 있으니, 매번 텍스트 생성 시 이전 버전과 다른 깊이 있는 분석 각도나 새로운 유용한 디테일을 찾아 독창적이고 심도 있게 작성해줘.
+7. `final_caption`은 장황하게 늘어놓지 말고, 독자가 스크롤하며 3초 안에 핵심을 파악할 수 있도록 아래 구조로 밀도 있게 '핵심화'해서 작성해줘 (매우 중요):
    - (1) 도입 3줄: `hooking_title`(제목)과 바로 이어지는 내용을 정확히 3줄로 써줘. 제목이 던진 궁금증을 받아서 '무엇이 어떻게 됐는지'를 자연스러운 문장으로 풀어주는 도입부야. 각 줄은 20~35자 정도의 완결된 문장으로 쓰고, '·' 같은 목록 기호는 붙이지 마. 제목을 그대로 반복하지 말고 한 걸음 더 들어간 내용을 담아.
    - (2) 핵심 정리: 기사에서 독자가 꼭 알아야 할 핵심 요점 2~3개만 골라, 각 항목을 짧은 한 줄로 간결하게 정리해(불필요한 미사여구·중복 설명 금지). 각 줄 앞에 '·' 기호를 붙여 목록처럼 보이게 해줘.
    - (3) 공식사이트: 기사에 공식 홈페이지·신청 페이지 주소나 사이트명이 실제로 언급된 경우에만 맨 마지막 블록으로 한 줄 적어줘. (예: "· 공식사이트: example.go.kr") 기사에 없으면 이 블록 자체를 통째로 생략해. 절대 주소를 지어내지 마.
    - 제공 시점, 비용/가격, 판매처 같은 항목은 캡션에 넣지 마. 그런 정보가 중요하면 (2)번 핵심 정리 안에 한 줄로 녹여줘.
    - 각 블록 사이에는 `\\n\\n`으로 여백을 줘서 가독성을 확보해. 전체 본문은 군더더기 없이 핵심만 담아 간결하게 유지하고, 별도의 마무리 CTA 문구는 넣지 마.
    - 본문 맨 마지막 줄에는 뉴스 기사의 핵심 키워드를 반영한 대표 해시태그를 딱 4개만 공백으로 구분해서 한 줄에 적어줘. 절대 4개를 초과하거나 미달하지 않도록 정확히 4개의 해시태그로 작성해줘.
-9. (매우 중요) 모든 슬라이드와 캡션(main_text, hooking_title, final_caption 등)에 이모지·이모티콘·특수 픽토그램을 절대 넣지 마. 오직 한글/숫자/기본 문장부호 텍스트만 사용해서 깔끔하고 정돈된 느낌으로 작성해줘. (단, 캡션 맨 끝의 해시태그는 예외)
-10. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 이미지 생성용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 배경 이미지로 사용되며 **반드시 실사 사진(photorealistic photograph) 스타일**이어야 해. 일러스트, 3D 렌더링, CGI, 만화, 벡터 아트 같은 표현은 절대 쓰지 마. 실제 사진작가가 카메라로 찍을 수 있는 장면만 묘사해줘 — 구체적인 사물, 풍경, 건축물, 클로즈업 질감 위주로 쓰고, 상징적인 아이콘이나 그림은 쓰지 마. 텍스트(글자), 워터마크, 서명, 로고, 사람 얼굴과 인물은 절대 넣지 마. 주제를 대표하는 피사체를 화면 위쪽 2/3에 배치하고 아래쪽 1/3은 단순하고 어둡게 비워두라고 명시해줘 (그 위에 흰 제목 글씨가 올라가기 때문). (예시: "A photorealistic close-up photograph of stacked Korean won banknotes on a dark wooden desk, natural window light from the left, shallow depth of field, realistic paper texture, uncluttered dark shadow across the bottom third")
-11. 카드뉴스 강조 색상 테마(`theme`)는 시스템이 랜덤으로 배정하므로 네가 주제에 맞춰 고민할 필요는 없어. `theme` 값은 아무 값이나 넣어도 되고 생략해도 돼 (어차피 무시되고 랜덤 값으로 덮어써져).
+8. (매우 중요) 모든 슬라이드와 캡션(main_text, hooking_title, final_caption 등)에 이모지·이모티콘·특수 픽토그램을 절대 넣지 마. 오직 한글/숫자/기본 문장부호 텍스트만 사용해서 깔끔하고 정돈된 느낌으로 작성해줘. (단, 캡션 맨 끝의 해시태그는 예외)
+9. (매우 중요) 제공된 뉴스 제목과 본문을 분석하여 대표 키워드를 선정하고, 그 키워드에 맞는 고품질 이미지 생성용 영문 프롬프트(`image_prompt`)를 작성해줘. 인스타그램 카드뉴스의 배경 이미지로 사용되며 **반드시 실사 사진(photorealistic photograph) 스타일**이어야 해. 일러스트, 3D 렌더링, CGI, 만화, 벡터 아트 같은 표현은 절대 쓰지 마. 실제 사진작가가 카메라로 찍을 수 있는 장면만 묘사해줘 — 구체적인 사물, 풍경, 건축물, 클로즈업 질감 위주로 쓰고, 상징적인 아이콘이나 그림은 쓰지 마. 텍스트(글자), 워터마크, 서명, 로고, 사람 얼굴과 인물은 절대 넣지 마. 주제를 대표하는 피사체를 화면 위쪽 2/3에 배치하고 아래쪽 1/3은 단순하고 어둡게 비워두라고 명시해줘 (그 위에 흰 제목 글씨가 올라가기 때문). (예시: "A photorealistic close-up photograph of stacked Korean won banknotes on a dark wooden desk, natural window light from the left, shallow depth of field, realistic paper texture, uncluttered dark shadow across the bottom third")
+10. 카드뉴스 강조 색상 테마(`theme`)는 시스템이 랜덤으로 배정하므로 네가 주제에 맞춰 고민할 필요는 없어. `theme` 값은 아무 값이나 넣어도 되고 생략해도 돼 (어차피 무시되고 랜덤 값으로 덮어써져).
 
 반드시 아래 JSON 스키마 구조의 유효한 JSON 객체로만 응답해야 해. 다른 부가적인 텍스트(예: ```json 등)는 제외해줘.
 
 JSON 스키마:
 {{
-  "total_pages": 7,
+  "total_pages": 6,
   "hooking_title": "대제목 텍스트",
   "theme": "blue",
   "slides": [
@@ -105,8 +115,7 @@ JSON 스키마:
     {{"page": 3, "type": "content", "main_text": "2. 시각 지능\\n사진 한 장만 올려도\\n**핵심 정보를 자동으로 정리해줘요**"}},
     {{"page": 4, "type": "content", "main_text": "3. 글쓰기 도구\\n**초안 작성 시간을 절반으로 줄이고**\\n톤앤매너까지 맞춰줍니다"}},
     {{"page": 5, "type": "content", "main_text": "4. 이미지 생성\\n텍스트 설명만으로\\n**고품질 이미지를 몇 초 만에 만들어요**"}},
-    {{"page": 6, "type": "content", "main_text": "5. 시리 통합\\n음성 명령 한마디로\\n**앱 실행부터 요약까지 처리합니다**"}},
-    {{"page": 7, "type": "cta", "main_text": "여러분 생각은 어떠신가요?\\n이 정보를 필요한 친구에게 공유하세요♡"}}
+    {{"page": 6, "type": "content", "main_text": "5. 시리 통합\\n음성 명령 한마디로\\n**앱 실행부터 요약까지 처리합니다**"}}
   ],
   "final_caption": "제목과 이어지는 도입 첫째 줄\\n둘째 줄\\n셋째 줄\\n\\n· 핵심 요점 1\\n· 핵심 요점 2\\n· 핵심 요점 3\\n\\n· 공식사이트: example.go.kr\\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4",
   "image_prompt": "A detailed English prompt for a photorealistic photograph based on the selected keywords"
@@ -160,7 +169,7 @@ JSON 스키마:
         if all(key in data for key in required_keys):
             # Assign the color theme at random (ignore any topic-based value the model returned)
             data["theme"] = random.choice(AVAILABLE_THEMES)
-            return data
+            return _normalize_slides(data)
         else:
             raise ValueError("Response missing required keys")
 

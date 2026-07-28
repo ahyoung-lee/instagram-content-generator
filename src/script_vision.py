@@ -1114,13 +1114,12 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
 if __name__ == "__main__":
     # Test layout generation
     test_plan = {
-        "total_pages": 3,
+        "total_pages": 2,
         "theme": "blue",
         "hooking_title": "테스트 카드뉴스",
         "slides": [
             {"page": 1, "type": "cover", "main_text": "인스타 자동화로\n돈 버는 비밀 공개"},
-            {"page": 2, "type": "content", "main_text": "1. 제주 장마 시작 🌧️\n올해 제주 장마는 6월 30일에 시작됐어요.\n**역대 3번째로 늦은 기록입니다** 📈"},
-            {"page": 3, "type": "cta", "main_text": "여러분 생각은 어떠신가요?\n이 정보를 필요한 친구에게 공유하세요♡"}
+            {"page": 2, "type": "content", "main_text": "1. 제주 장마 시작 🌧️\n올해 제주 장마는 6월 30일에 시작됐어요.\n**역대 3번째로 늦은 기록입니다** 📈"}
         ]
     }
     generate_carousel_images(test_plan, "./test_output")
