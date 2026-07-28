@@ -156,6 +156,8 @@ const updateTitleBtn = document.getElementById('update-title-btn');
 const saveBtn = document.getElementById('save-btn');
 const reelBtn = document.getElementById('reel-btn');
 const saveVideoBtn = document.getElementById('save-video-btn');
+const reelYtBtn = document.getElementById('reel-yt-btn');
+const saveVideoYtBtn = document.getElementById('save-video-yt-btn');
 
 // --- Background photo attached on the main screen ---
 // A photo picked here becomes the post's background image (used crisp on the
@@ -213,13 +215,15 @@ if (bgFileClear) {
     bgFileClear.addEventListener('click', () => setSelectedBgFile(null));
 }
 
-// Hide the "영상 저장" button (a previously built reel is stale once the
+// Hide both "영상 저장" buttons (a previously built video is stale once the
 // underlying card images change).
 function resetReelButton() {
-    if (saveVideoBtn) {
-        saveVideoBtn.classList.add('hidden');
-        saveVideoBtn.href = '#';
-    }
+    [saveVideoBtn, saveVideoYtBtn].forEach((btn) => {
+        if (btn) {
+            btn.classList.add('hidden');
+            btn.href = '#';
+        }
+    });
 }
 
 // --- Attach / remove a user photo on a card ---
@@ -637,30 +641,31 @@ saveBtn.addEventListener('click', async (e) => {
     }
 });
 
-// 5. Create Reels Video from the generated cards
-reelBtn.addEventListener('click', async () => {
+// 5. Build a video from the generated cards — 9:16 for Reels, 16:9 for YouTube.
+// Neither shape crops the cards; the leftover area gets a blurred backdrop.
+async function buildVideo({ orientation, button, saveButton, label, downloadName }) {
     if (!currentPostData.date_str) {
         alert('영상으로 만들 콘텐츠가 없습니다. 먼저 콘텐츠를 생성해 주세요.');
         return;
     }
 
-    const originalText = reelBtn.innerHTML;
-    reelBtn.disabled = true;
-    reelBtn.style.opacity = '0.6';
-    reelBtn.style.pointerEvents = 'none';
-    reelBtn.innerHTML = '🎬 영상 만드는 중...';
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.style.opacity = '0.6';
+    button.style.pointerEvents = 'none';
+    button.innerHTML = '🎬 영상 만드는 중...';
 
-    // Reuse the fullscreen loader with a reel-specific message
+    // Reuse the fullscreen loader with a video-specific message
     const loadingSub = document.querySelector('.loading-sub');
     const originalSub = loadingSub ? loadingSub.textContent : '';
-    if (loadingSub) loadingSub.textContent = '카드 이미지를 이어붙여 릴스 영상을 만드는 중입니다.';
+    if (loadingSub) loadingSub.textContent = `카드 이미지를 이어붙여 ${label} 영상을 만드는 중입니다.`;
     loadingOverlay.classList.remove('hidden');
 
     try {
         const response = await apiFetch('/api/create_reel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date_str: currentPostData.date_str })
+            body: JSON.stringify({ date_str: currentPostData.date_str, orientation })
         });
 
         if (!response.ok) {
@@ -670,25 +675,41 @@ reelBtn.addEventListener('click', async () => {
         const data = await response.json();
 
         if (data.success) {
-            // Reveal the "영상 저장" download button
-            saveVideoBtn.href = data.reel_url + '?t=' + Date.now();
-            saveVideoBtn.download = 'reel.mp4';
-            saveVideoBtn.classList.remove('hidden');
+            // Reveal the matching "영상 저장" download button
+            saveButton.href = data.reel_url + '?t=' + Date.now();
+            saveButton.download = downloadName;
+            saveButton.classList.remove('hidden');
         } else {
-            alert(`릴스 제작 실패: ${data.error || '알 수 없는 오류'}`);
+            alert(`${label} 제작 실패: ${data.error || '알 수 없는 오류'}`);
         }
     } catch (error) {
         console.error(error);
-        alert(`릴스 제작 중 오류가 발생했습니다: ${error.message}`);
+        alert(`${label} 제작 중 오류가 발생했습니다: ${error.message}`);
     } finally {
         loadingOverlay.classList.add('hidden');
         if (loadingSub) loadingSub.textContent = originalSub;
-        reelBtn.disabled = false;
-        reelBtn.style.opacity = '1';
-        reelBtn.style.pointerEvents = 'auto';
-        reelBtn.innerHTML = originalText;
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.style.pointerEvents = 'auto';
+        button.innerHTML = originalText;
     }
-});
+}
+
+reelBtn.addEventListener('click', () => buildVideo({
+    orientation: 'vertical',
+    button: reelBtn,
+    saveButton: saveVideoBtn,
+    label: '릴스',
+    downloadName: 'reel.mp4'
+}));
+
+reelYtBtn.addEventListener('click', () => buildVideo({
+    orientation: 'horizontal',
+    button: reelYtBtn,
+    saveButton: saveVideoYtBtn,
+    label: '유튜브',
+    downloadName: 'youtube.mp4'
+}));
 
 // Initialize backgrounds on load
 window.addEventListener('DOMContentLoaded', () => {

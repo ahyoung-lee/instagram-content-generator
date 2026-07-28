@@ -463,38 +463,6 @@ body {
     margin-bottom: 10px;
 }
 
-/* "릴스용 제작" — distinct purple accent */
-.btn-reel {
-    background: #7c3aed;
-    box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.btn-reel:hover {
-    background: #6d28d9;
-    box-shadow: 0 12px 30px rgba(124, 58, 237, 0.45);
-}
-
-/* "영상 저장" — distinct green accent, appears once the reel is ready */
-.btn-video {
-    background: #16a34a;
-    box-shadow: 0 8px 25px rgba(22, 163, 74, 0.3);
-    display: inline-flex;
-    text-decoration: none;
-}
-
-.btn-video:hover {
-    background: #15803d;
-    box-shadow: 0 12px 30px rgba(22, 163, 74, 0.45);
-}
-
-.btn-video.hidden {
-    display: none;
-}
-
 .btn-accent {
     background: var(--key-color);
     color: #fff;
@@ -513,6 +481,56 @@ body {
     background: var(--key-color-hover);
     transform: translateY(-2px);
     box-shadow: 0 12px 30px rgba(255, 102, 0, 0.45);
+}
+
+/* Colour variants of .btn-accent. These must stay BELOW .btn-accent: they have
+   the same specificity, so source order is what lets them win. */
+
+/* "릴스용 제작" — distinct purple accent */
+.btn-reel {
+    background: #7c3aed;
+    box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-reel:hover {
+    background: #6d28d9;
+    box-shadow: 0 12px 30px rgba(124, 58, 237, 0.45);
+}
+
+/* "유튜브용 제작" — distinct red accent */
+.btn-youtube {
+    background: #dc2626;
+    box-shadow: 0 8px 25px rgba(220, 38, 38, 0.3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-youtube:hover {
+    background: #b91c1c;
+    box-shadow: 0 12px 30px rgba(220, 38, 38, 0.45);
+}
+
+/* "영상 저장" — distinct green accent, appears once the video is ready */
+.btn-video {
+    background: #16a34a;
+    box-shadow: 0 8px 25px rgba(22, 163, 74, 0.3);
+    display: inline-flex;
+    text-decoration: none;
+}
+
+.btn-video:hover {
+    background: #15803d;
+    box-shadow: 0 12px 30px rgba(22, 163, 74, 0.45);
+}
+
+.btn-video.hidden {
+    display: none;
 }
 
 /* Status Log and Fallback Actions */

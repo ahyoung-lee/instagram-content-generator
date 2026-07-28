@@ -62,6 +62,7 @@ class PrepareDownloadRequest(BaseModel):
 
 class CreateReelRequest(BaseModel):
     date_str: str
+    orientation: str = "vertical"   # "vertical" = 9:16 Reels, "horizontal" = 16:9 YouTube
 
 class DeleteImageRequest(BaseModel):
     date_str: str
@@ -576,8 +577,10 @@ def api_prepare_download(payload: PrepareDownloadRequest, x_access_key: Optional
 @app.post("/api/create_reel")
 def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = Header(default=None)):
     """
-    Stitches the already-generated card images for a post into an
-    Instagram-Reels-ready MP4 (1080x1920, cross-fade between cards).
+    Stitches the already-generated card images for a post into an MP4 with a
+    cross-fade between cards — 9:16 for Instagram Reels, or 16:9 for YouTube.
+    Neither shape crops the cards: the leftover area is filled with a blurred
+    copy of the card.
     """
     verify_access(x_access_key)
     try:
@@ -591,12 +594,15 @@ def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = He
             slide_files = _ordered_paths(post_dir, _load_plan_data(post_dir))
         if not slide_files:
             slide_files = sorted(glob.glob(os.path.join(post_dir, "slide_*.jpg")))
-        print(f"[reel] request date_str={payload.date_str}, slides={len(slide_files)}", flush=True)
+        print(f"[reel] request date_str={payload.date_str}, orientation={payload.orientation}, "
+              f"slides={len(slide_files)}", flush=True)
         if not slide_files:
-            raise HTTPException(status_code=404, detail="릴스로 만들 카드 이미지를 찾을 수 없습니다. 먼저 콘텐츠를 생성해 주세요.")
+            raise HTTPException(status_code=404, detail="영상으로 만들 카드 이미지를 찾을 수 없습니다. 먼저 콘텐츠를 생성해 주세요.")
 
-        from src.script_reels import create_reel_video
-        reel_path = create_reel_video(slide_files, post_dir)
+        from src.script_reels import PRESETS, create_reel_video
+        if payload.orientation not in PRESETS:
+            raise HTTPException(status_code=400, detail=f"알 수 없는 영상 비율입니다: {payload.orientation}")
+        reel_path = create_reel_video(slide_files, post_dir, orientation=payload.orientation)
 
         relative_reel_url = f"/save/{payload.date_str}/{os.path.basename(reel_path)}"
         print(f"[reel] success -> {relative_reel_url}", flush=True)
