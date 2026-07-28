@@ -3,11 +3,136 @@ from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 import re
 
+
+class ArticleFetchError(Exception):
+    """Raised when the article behind a URL could not be read.
+
+    This is deliberately loud. Silently substituting placeholder text used to
+    make the AI invent an article out of thin air, producing confident-looking
+    cards that had nothing to do with the submitted link.
+    """
+
+
+# Containers that hold the article body on common Korean/global news sites.
+# Checked in order; the first one with real text wins.
+ARTICLE_SELECTORS = [
+    "article",
+    "#dic_area",                    # Naver News
+    "#articleBodyContents",         # Naver News (legacy)
+    "#newsct_article",              # Naver News (current)
+    "#article-view-content-div",    # many Korean CMS installs
+    ".article-body", ".article_body", ".articleBody",
+    ".news-article-body", ".art_text", ".story-news",
+    "[itemprop='articleBody']",
+    "#articleBody", "#article_body", "#newsEndContents",
+    ".entry-content", ".post-content",   # blogs
+    "main",
+]
+
+# Text that betrays an error/placeholder page rather than an article.
+ERROR_PAGE_MARKERS = [
+    "페이지가 존재하지 않", "페이지를 찾을 수 없", "사용할 수 없는 페이지",
+    "잘못된 접근", "삭제된 기사", "존재하지 않는 기사",
+    "page not found", "404 not found", "access denied", "forbidden",
+]
+
+
+def _clean_title(raw: str) -> str:
+    """Strips the trailing site name that news sites append to <title>."""
+    title = re.sub(r"\s+", " ", (raw or "")).strip()
+    # "기사 제목 | 연합뉴스", "기사 제목 - 한겨레", "기사 제목 :: 사이트"
+    for sep in ("|", " - ", "::", " — "):
+        if sep in title:
+            head = title.split(sep)[0].strip()
+            # Only accept the split if it left something article-length behind.
+            if len(head) >= 8:
+                title = head
+                break
+    return title.strip(" |-:—")
+
+
+def _extract_title(soup: BeautifulSoup) -> str:
+    """Prefers the real headline (og:title / h1) over the browser tab title."""
+    og = soup.find("meta", property="og:title") or soup.find("meta", attrs={"name": "title"})
+    if og and og.get("content", "").strip():
+        return _clean_title(og["content"])
+
+    h1 = soup.find("h1")
+    if h1 and h1.get_text(strip=True):
+        return _clean_title(h1.get_text(strip=True))
+
+    if soup.title and soup.title.string:
+        return _clean_title(soup.title.string)
+    return ""
+
+
+def _text_from(container) -> str:
+    """Joins the paragraph text inside one container.
+
+    Only <p> (plus <br>-separated blocks) are read — never <div> — because the
+    old code collected nested <div>s and their child <p>s, duplicating the body
+    many times over and burying it under navigation text.
+    """
+    parts = []
+    paragraphs = container.find_all("p")
+    if paragraphs:
+        for p in paragraphs:
+            text = p.get_text(" ", strip=True)
+            if len(text) >= 20:
+                parts.append(text)
+    if not parts:
+        # Some CMSs dump the body as bare text with <br> separators.
+        raw = container.get_text("\n", strip=True)
+        parts = [ln.strip() for ln in raw.split("\n") if len(ln.strip()) >= 20]
+    return "\n".join(parts)
+
+
+def _extract_body(soup: BeautifulSoup) -> str:
+    """Finds the article body, preferring known containers, else densest block."""
+    for selector in ARTICLE_SELECTORS:
+        for container in soup.select(selector):
+            text = _text_from(container)
+            if len(text) >= 200:
+                return text
+
+    # Fallback: whichever element holds the most paragraph text.
+    best = ""
+    for container in soup.find_all(["div", "section"]):
+        text = _text_from(container)
+        if len(text) > len(best):
+            best = text
+    return best
+
+
+def _looks_like_article(text: str) -> tuple:
+    """Returns (ok, reason). Rejects nav/headline soup and error pages."""
+    stripped = text.strip()
+    if len(stripped) < 250:
+        return False, f"본문이 너무 짧습니다 ({len(stripped)}자)."
+
+    lowered = stripped[:1500].lower()
+    for marker in ERROR_PAGE_MARKERS:
+        if marker in lowered or marker in stripped[:1500]:
+            return False, "삭제되었거나 존재하지 않는 기사 페이지입니다."
+
+    # A real article is made of sentences. A scraped headline list is a pile of
+    # short fragments with almost no sentence enders.
+    enders = stripped.count(". ") + stripped.count("다.") + stripped.count("요.") + stripped.count("? ")
+    if enders < 3:
+        return False, "기사 본문이 아니라 목록/메뉴 텍스트로 보입니다."
+
+    return True, ""
+
+
 def get_article_text(url: str = None) -> dict:
     """
     Crawls article text from the given URL.
     If no URL is provided, falls back to the top trending article from Hankyoreh RSS.
     Returns a dictionary with 'title', 'url', and 'content'.
+
+    Raises ArticleFetchError when the page cannot be read or does not look like
+    an article, so the caller can tell the user instead of generating cards from
+    junk (and without spending money on the AI calls).
     """
     selected_url = url.strip() if url else None
 
@@ -27,7 +152,7 @@ def get_article_text(url: str = None) -> dict:
                     top_item = items[0]
                     title_elem = top_item.find("title")
                     link_elem = top_item.find("link")
-                    
+
                     selected_url = link_elem.text.strip() if link_elem is not None else None
                     fallback_title = title_elem.text.strip() if title_elem is not None else "Trending News"
                     print(f"Top trending article found: {fallback_title} ({selected_url})")
@@ -36,13 +161,9 @@ def get_article_text(url: str = None) -> dict:
             else:
                 raise Exception(f"RSS feed request failed with status: {response.status_code}")
         except Exception as e:
-            print(f"Failed to fetch RSS feed: {e}")
-            # Absolute fallback
-            return {
-                "title": "인공지능과 생산성 혁신",
-                "url": "N/A",
-                "content": "최근 생성형 AI 기술의 급격한 발전으로 많은 지식 노동자와 창작자들의 업무 프로세스가 변화하고 있습니다. 특히 마케팅 문구 작성, 이미지 생성, 소셜 미디어 관리 등 자동화할 수 있는 영역이 확대되며 적은 시간으로 최대의 효율을 내는 1인 기업 및 크리에이터들이 증가하고 있습니다. 이러한 트렌드는 단순 기술 활용을 넘어 수익 모델의 변화로 이어지고 있습니다."
-            }
+            raise ArticleFetchError(
+                f"기사 URL을 입력하지 않았고, 자동으로 가져올 최신 기사도 불러오지 못했습니다. ({e})"
+            )
 
     # Crawl the selected URL
     # We use a dual strategy:
@@ -57,63 +178,50 @@ def get_article_text(url: str = None) -> dict:
         }
     ]
 
-    last_error = ""
+    last_error = "알 수 없는 오류"
     for headers in strategies:
         try:
             print(f"Scraping content from URL: {selected_url} (Headers: {'Browser' if headers else 'Default'})")
             res = requests.get(selected_url, headers=headers, timeout=10)
             res.raise_for_status()
-            
+
             # Decode encoding if not set correctly
             if res.encoding == 'ISO-8859-1':
                 res.encoding = res.apparent_encoding
-                
+
             soup = BeautifulSoup(res.text, 'html.parser')
-            
-            # Get title
-            title = ""
-            if soup.title:
-                title = soup.title.string.strip()
-            if not title:
-                title = soup.find('h1')
-                title = title.text.strip() if title else "Scraped Article"
-                
-            # Clean article text
-            # Remove script, style and navigation elements
-            for element in soup(["script", "style", "header", "footer", "nav", "aside", "iframe"]):
+
+            # Drop chrome that would otherwise be mistaken for article text.
+            for element in soup(["script", "style", "header", "footer", "nav",
+                                 "aside", "iframe", "form", "noscript"]):
                 element.decompose()
-                
-            # Extract paragraph text
-            paragraphs = soup.find_all(['p', 'div', 'h1', 'h2', 'h3', 'h4'])
-            text_lines = []
-            for p in paragraphs:
-                text = p.get_text(strip=True)
-                if len(text) > 30: # Only keep lines with substantial text to avoid nav links
-                    text_lines.append(text)
-                    
-            content = "\n".join(text_lines)
-            content = re.sub(r'\n+', '\n', content) # normalize newlines
-            content = content[:4000]
-            
-            if len(content.strip()) > 150: # Check if we got substantial content
+
+            title = _extract_title(soup)
+            content = _extract_body(soup)
+            content = re.sub(r'\n{2,}', '\n', content).strip()
+            content = content[:6000]
+
+            ok, reason = _looks_like_article(content)
+            if ok:
+                print(f"Scrape OK: title={title[:40]!r}, {len(content)} chars")
                 return {
-                    "title": title,
+                    "title": title or "제목 없음",
                     "url": selected_url,
                     "content": content
                 }
-            else:
-                last_error = f"Content extracted was too short ({len(content.strip())} chars)."
-                
+            last_error = reason
+            print(f"Rejected scrape from {selected_url}: {reason}")
+
         except Exception as e:
             last_error = str(e)
             print(f"Strategy failed for {selected_url}: {e}")
 
-    # Fallback response if all strategies failed
-    return {
-        "title": f"크롤링 대체: {selected_url}",
-        "url": selected_url,
-        "content": f"입력하신 URL({selected_url})을 크롤링하는 데 실패하여 기본 정보로 대체합니다. 원인은 네트워크 차단, 보안 설정(Robots.txt) 또는 동적 클라이언트 렌더링일 수 있습니다. (오류 메시지: {last_error})"
-    }
+    raise ArticleFetchError(
+        f"이 링크의 기사 본문을 읽지 못했습니다. ({last_error}) "
+        "기사 본문이 보이는 주소인지 확인해 주세요. 로그인이 필요하거나 "
+        "스크래핑을 차단하는 사이트일 수 있습니다."
+    )
+
 
 if __name__ == "__main__":
     # Test execution

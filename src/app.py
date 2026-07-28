@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List
 
-from src.agent_trend import get_article_text
+from src.agent_trend import get_article_text, ArticleFetchError
 from src.agent_creative import generate_instagram_plan
 from src.script_vision import generate_carousel_images
 from src.script_instagram import publish_to_instagram
@@ -222,8 +222,13 @@ async def api_generate(
             reuse_background = True
             print("Using the uploaded photo as the background; skipping AI background generation.")
 
-        # Step 1: Crawl URL or fallback to RSS trending topic
-        trend_result = get_article_text(url)
+        # Step 1: Crawl URL or fallback to RSS trending topic.
+        # A failure here stops the run before any paid API call: generating from
+        # unreadable pages is what used to produce cards about the wrong story.
+        try:
+            trend_result = get_article_text(url)
+        except ArticleFetchError as fetch_err:
+            raise HTTPException(status_code=422, detail=str(fetch_err))
         title = trend_result.get("title", "Trending")
         content = trend_result.get("content", "")
         scraped_url = trend_result.get("url", "N/A")
