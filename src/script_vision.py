@@ -27,9 +27,10 @@ CANVASES = {
         "watermark_pos": (50, 50),
         "watermark_width": 160,
         "bar_from_bottom": (35, 31),   # accent bar: top/bottom offsets from H
+        "page_from_bottom": 92,        # page indicator: centered, just above the bar
+        "page_font": 26,
         "cover": {
             "grad_start": 500,
-            "page_pos": (900, 285),
             "badge_box": (80, 650, 390, 695),
             "badge_font": 22,
             "title_top": 730,
@@ -38,14 +39,17 @@ CANVASES = {
             "teaser_from_bottom": 143,
             "teaser_clear": 150,
             "teaser_font": 26,
-            "teaser_text": "옆으로 넘겨서 핵심 요약 보기 ▶",
+            # The carousel is swiped, so it keeps the swipe prompt. A video has
+            # nothing to swipe, so `teaser_text_video` signs off with the brand
+            # name instead (see the `for_video` flag).
+            "teaser_text": "옆으로 넘겨서 보기 ▶",
+            "teaser_text_video": "always good",
         },
         "card": {
             "box": (80, 240, 1000, 1130),
             "wrap": 820,
             "badge_top": 280,
             "text_top": 360,
-            "page_pos_x": 900,
             "body": 43, "line": 70,
             "body_photo": 34, "line_photo": 54,
             "cta": 46, "cta_line": 80,
@@ -64,9 +68,10 @@ CANVASES = {
         "watermark_pos": (60, 55),
         "watermark_width": 190,
         "bar_from_bottom": (30, 26),
+        "page_from_bottom": 74,
+        "page_font": 28,
         "cover": {
             "grad_start": 340,
-            "page_pos": (1690, 150),
             "badge_box": (140, 470, 470, 518),
             "badge_font": 26,
             "title_top": 560,
@@ -75,8 +80,9 @@ CANVASES = {
             "teaser_from_bottom": 118,
             "teaser_clear": 130,
             "teaser_font": 30,
-            # A video has nothing to swipe, so the Instagram prompt is replaced.
-            "teaser_text": "핵심 요약 이어서 보기 ▶",
+            # This canvas only ever feeds the YouTube video, so there is no
+            # swipe-prompt variant to choose between.
+            "teaser_text": "always good",
         },
         "card": {
             # Kept well inside the frame: a card spanning the full 1920 would
@@ -85,7 +91,6 @@ CANVASES = {
             "wrap": 1100,
             "badge_top": 175,
             "text_top": 265,
-            "page_pos_x": 1690,
             "body": 44, "line": 68,
             "body_photo": 36, "line_photo": 56,
             "cta": 50, "cta_line": 84,
@@ -764,14 +769,16 @@ def paste_slide_photo(image: Image.Image, photo_path: str, x0: int, y0: int, x1:
     image.paste(photo, (x0, y0), mask)
 
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS) -> Image.Image:
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS, for_video: bool = False) -> Image.Image:
     """
     Generates a single image slide based on its content and type.
     Uses a premium glassmorphic card news layout structure for content/CTA,
     and a bold bottom-gradient layout for the cover to make the title pop.
     The accent/key color and gradient fallback are driven by the chosen theme.
     `canvas` picks the shape: "portrait" (4:5 Instagram) or "landscape" (16:9
-    YouTube); the layout numbers for each live in CANVASES.
+    YouTube); the layout numbers for each live in CANVASES. `for_video` marks a
+    card that will end up in a video rather than in the swipeable carousel, which
+    swaps the cover's swipe prompt for the brand sign-off.
     """
     slide_type = slide.get("type", "content")
     theme_data = get_theme(theme)
@@ -792,10 +799,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             image = image.convert("RGBA")
             
         if slide_type != "cover":
-            # Apply Gaussian Blur to content slides
-            image = image.filter(ImageFilter.GaussianBlur(15))
+            # Light blur on content slides: enough to keep the copy card readable
+            # while the photo behind it stays recognizable (a 15px blur turned it
+            # into an unreadable smear).
+            image = image.filter(ImageFilter.GaussianBlur(7))
             # Draw standard transparent overlay for content slides
-            overlay = Image.new("RGBA", (W, H), (10, 10, 15, 80)) # ~30% opacity
+            overlay = Image.new("RGBA", (W, H), (10, 10, 15, 70)) # ~27% opacity
             image = Image.alpha_composite(image, overlay)
         else:
             # For Cover Slide: Crisp background with bottom-up dark gradient shadow
@@ -834,14 +843,18 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
     bar_top, bar_bottom = spec["bar_from_bottom"]
     draw.rectangle([margin, H - bar_top, W - margin, H - bar_bottom], fill=key_color)
 
+    # Page indicator, centered at the bottom of every card just above the accent
+    # bar. It sits outside the content card, so drawing it here (before the card
+    # is composited on top) is safe for every slide type.
+    page_num = slide.get("page", 1)
+    page_text = f"{page_num} / {total_pages}"
+    page_font = get_system_font(spec["page_font"])
+    page_w = _text_width(page_font, page_text)
+    draw.text(((W - page_w) // 2, H - spec["page_from_bottom"]), page_text,
+              fill=(180, 180, 180, 220), font=page_font)
+
     if slide_type == "cover":
         # Cover Page Layout (No card, text drawn directly on bottom gradient)
-        
-        # Render slide page indicator inside the cover area (top-right)
-        page_num = slide.get("page", 1)
-        page_text = f"{page_num} / {total_pages}"
-        page_font = get_system_font(26)
-        draw.text(cover_spec["page_pos"], page_text, fill=(180, 180, 180, 220), font=page_font)
 
         # Draw cover top badge
         bx0, by0, bx1, by1 = cover_spec["badge_box"]
@@ -884,6 +897,8 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # Draw teaser text at the bottom. The logo moved to the top-left corner,
         # so the teaser reclaims the full-width left margin used by the title.
         teaser_text = cover_spec["teaser_text"]
+        if for_video:
+            teaser_text = cover_spec.get("teaser_text_video", teaser_text)
         teaser_font = get_system_font(cover_spec["teaser_font"])
         draw.text((margin, H - cover_spec["teaser_from_bottom"]), teaser_text, fill=key_color, font=teaser_font)
         
@@ -914,8 +929,6 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         # Alpha composite the card onto the main background
         image = Image.alpha_composite(image, card_overlay)
         draw = ImageDraw.Draw(image)
-        
-        page_num = slide.get("page", 1)
 
         # A user-inserted photo, when present, fills the top of the card and the
         # copy shrinks and moves underneath it. Without one the layout is
@@ -992,11 +1005,6 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             badge_top = card_y0 + photo_h + 30
             text_top = badge_top + BADGE_H + 35
 
-        # Render slide page indicator on the badge row (right-aligned)
-        page_text = f"{page_num} / {total_pages}"
-        page_font = get_system_font(26)
-        draw.text((card_spec["page_pos_x"], badge_top + 5), page_text, fill=(180, 180, 180, 220), font=page_font)
-
         # Draw the badge pill (centered)
         badge_font = get_system_font(22, bold=True)
         if hasattr(badge_font, "getbbox"):
@@ -1040,14 +1048,15 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
 def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None,
                              allow_paid_background: bool = True, canvas: str = DEFAULT_CANVAS,
-                             filename_prefix: str = "slide") -> list:
+                             filename_prefix: str = "slide", for_video: bool = False) -> list:
     """
     Generates all slide images based on the plan and saves them to output_dir.
     Returns a list of generated file paths.
 
     `canvas` selects the card shape ("portrait" for the 4:5 Instagram carousel,
-    "landscape" for 16:9 YouTube frames) and `filename_prefix` keeps the two
-    sets side by side in the same post folder.
+    "landscape" for 16:9 YouTube frames) and `filename_prefix` keeps the sets
+    side by side in the same post folder. `for_video` renders the video wording
+    of the cover instead of the carousel's swipe prompt.
     """
     os.makedirs(output_dir, exist_ok=True)
     spec = get_canvas(canvas)
@@ -1099,7 +1108,7 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     for slide in slides:
         page_num = slide.get("page", 1)
         img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title,
-                               theme=theme, photo_dir=output_dir, canvas=canvas)
+                               theme=theme, photo_dir=output_dir, canvas=canvas, for_video=for_video)
 
         filename = f"{filename_prefix}_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)

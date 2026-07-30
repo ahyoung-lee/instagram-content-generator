@@ -12,11 +12,14 @@ import imageio_ffmpeg
 # 720p-class frames (same pixel count either way) keep the libx264 encoder's
 # memory low enough to run on small hosts (Render free tier = 512MB).
 PRESETS = {
-    # `seconds` is how long each card is held. 2.5s was too quick to finish
-    # reading a card of Korean copy; YouTube gets a longer hold still, since
-    # viewers watch it rather than swiping past.
-    "vertical":   {"size": (720, 1280), "filename": "reel.mp4",      "label": "9:16", "seconds": 4.5},
-    "horizontal": {"size": (1280, 720), "filename": "reel_wide.mp4", "label": "16:9", "seconds": 7.0},
+    # `seconds` is how long each card is held. `first_seconds` (optional) gives
+    # the cover its own pace: it carries one short hook, so it needs less time on
+    # screen than the cards of copy that follow. Without it the cover uses
+    # `seconds` like every other card.
+    "vertical":   {"size": (720, 1280), "filename": "reel.mp4",      "label": "9:16",
+                   "seconds": 3.0, "first_seconds": 2.0},
+    "horizontal": {"size": (1280, 720), "filename": "reel_wide.mp4", "label": "16:9",
+                   "seconds": 3.0},
 }
 FPS = 30
 
@@ -75,15 +78,30 @@ def _compose_frame(card_path: str, frame_w: int, frame_h: int) -> Image.Image:
     return bg
 
 
-def create_reel_video(image_paths: list, output_dir: str,
-                      seconds_per_card: float = None, fade_seconds: float = 0.5,
-                      orientation: str = "vertical") -> str:
+def _slide_frame(current: Image.Image, nxt: Image.Image, offset: int) -> Image.Image:
     """
-    Stitches the given card images into an H.264/yuv420p MP4 with a smooth
-    cross-fade between cards. `orientation` picks the shape: "vertical" for a
-    9:16 Instagram Reel, "horizontal" for a 16:9 YouTube video. Each card is
-    held for `seconds_per_card` (defaulting to the orientation's own pace), and
-    consecutive cards blend over `fade_seconds`. Returns the output file path.
+    One frame of the swipe transition: `current` has slid `offset` pixels off the
+    left edge and `nxt` follows it in from the right, so the pair moves as a
+    single strip — the same feel as swiping a carousel.
+    """
+    frame_w, frame_h = current.size
+    frame = Image.new("RGB", (frame_w, frame_h))
+    frame.paste(current, (-offset, 0))
+    frame.paste(nxt, (frame_w - offset, 0))
+    return frame
+
+
+def create_reel_video(image_paths: list, output_dir: str,
+                      seconds_per_card: float = None, transition_seconds: float = 0.25,
+                      orientation: str = "vertical", first_card_seconds: float = None) -> str:
+    """
+    Stitches the given card images into an H.264/yuv420p MP4 where each card
+    slides in from the right as the previous one slides off to the left.
+    `orientation` picks the shape: "vertical" for a 9:16 Instagram Reel,
+    "horizontal" for a 16:9 YouTube video. Each card occupies
+    `seconds_per_card` (defaulting to the orientation's own pace) with the first
+    card using `first_card_seconds`, and the swipe between two cards takes
+    `transition_seconds`. Returns the output file path.
     """
     preset = PRESETS.get(orientation)
     if preset is None:
@@ -91,6 +109,8 @@ def create_reel_video(image_paths: list, output_dir: str,
     frame_w, frame_h = preset["size"]
     if seconds_per_card is None:
         seconds_per_card = preset["seconds"]
+    if first_card_seconds is None:
+        first_card_seconds = preset.get("first_seconds", seconds_per_card)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -105,11 +125,12 @@ def create_reel_video(image_paths: list, output_dir: str,
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
     per = max(0.2, float(seconds_per_card))
-    fade = max(0.0, float(fade_seconds))
+    first = max(0.2, float(first_card_seconds))
+    slide = max(0.0, float(transition_seconds))
     n = len(paths)
-    blend_count = int(round(fade * FPS)) if fade > 0 else 0
+    slide_count = int(round(slide * FPS)) if slide > 0 else 0
 
-    # Pre-render EVERY frame (holds + cross-fade blends) to disk one at a time,
+    # Pre-render EVERY frame (holds + swipe steps) to disk one at a time,
     # then let ffmpeg's concat demuxer read the images sequentially. Both Python
     # and ffmpeg only ever hold a frame or two in memory, which is essential on
     # small hosts (Render free tier = 512MB) where the xfade filter graph would
@@ -129,16 +150,22 @@ def create_reel_video(image_paths: list, output_dir: str,
         current = _compose_frame(paths[0], frame_w, frame_h)
         for i in range(n):
             is_last = (i == n - 1)
-            # Each non-final card holds for (per - fade) then blends for `fade`,
-            # so it occupies ~`per` seconds overall; the final card holds `per`.
-            hold = per if is_last else max(0.05, per - fade)
+            # Each non-final card holds still, then spends `slide` seconds
+            # swiping away, so it occupies its full slot overall; the final card
+            # simply holds.
+            slot = first if i == 0 else per
+            hold = slot if is_last else max(0.05, slot - slide)
             entries.append((write_img(current), hold))
 
             if not is_last:
                 nxt = _compose_frame(paths[i + 1], frame_w, frame_h)
-                for k in range(1, blend_count + 1):
-                    alpha = k / (blend_count + 1)
-                    entries.append((write_img(Image.blend(current, nxt, alpha)), 1.0 / FPS))
+                for k in range(1, slide_count + 1):
+                    # Smoothstep easing: the swipe starts and ends gently instead
+                    # of jerking at a constant speed.
+                    t = k / (slide_count + 1)
+                    eased = t * t * (3 - 2 * t)
+                    entries.append((write_img(_slide_frame(current, nxt, int(frame_w * eased))),
+                                    1.0 / FPS))
                 current.close()
                 current = nxt
         current.close()

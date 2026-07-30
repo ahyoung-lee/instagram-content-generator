@@ -579,19 +579,29 @@ def api_prepare_download(payload: PrepareDownloadRequest, x_access_key: Optional
         print(f"Prepare download error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-def _landscape_cards(post_dir: str, ordered_paths: list) -> list:
-    """Re-renders the post's AI cards on a 16:9 canvas for the YouTube video.
+# Cards for a video are always redrawn rather than reused from the carousel: the
+# cover's "옆으로 넘겨서 보기" prompt only makes sense on something swipeable, so a
+# video gets the brand sign-off instead. 16:9 additionally needs the whole layout
+# redrawn, since 4:5 cards could only fill that frame by cropping away more than
+# half their height. Each orientation maps to (canvas, filename prefix).
+_VIDEO_CANVAS = {
+    "vertical":   ("portrait",  "vreel"),
+    "horizontal": ("landscape", "wide"),
+}
 
-    The 4:5 cards can only fill a 16:9 frame by cropping away more than half
-    their height, so the copy is redrawn for the wider shape instead. The
-    background master saved with the post is reused, so this costs no API call.
-    Standalone photos in the sequence are left untouched, and any failure falls
-    back to the portrait cards (which the video step letterboxes as before).
+
+def _video_cards(post_dir: str, ordered_paths: list, orientation: str) -> list:
+    """Re-renders the post's AI cards for the video in the given orientation.
+
+    The background master saved with the post is reused, so this costs no API
+    call. Standalone photos in the sequence are left untouched, and any failure
+    falls back to the carousel cards.
     """
+    canvas, prefix = _VIDEO_CANVAS[orientation]
     plan_data = _load_plan_data(post_dir)
     plan = plan_data.get("plan")
     if not plan:
-        print("[reel] no plan.json cards to re-render; using the portrait ones.", flush=True)
+        print("[reel] no plan.json cards to re-render; using the carousel ones.", flush=True)
         return ordered_paths
 
     try:
@@ -601,29 +611,30 @@ def _landscape_cards(post_dir: str, ordered_paths: list) -> list:
             reuse_background=True,
             article_title=plan_data.get("title"),
             allow_paid_background=False,   # never buy a new background for the video
-            canvas="landscape",
-            filename_prefix="wide",
+            canvas=canvas,
+            filename_prefix=prefix,
+            for_video=True,
         )
     except Exception as e:
-        print(f"[reel] landscape render failed ({e}); using the portrait cards.", flush=True)
+        print(f"[reel] {canvas} render failed ({e}); using the carousel cards.", flush=True)
         return ordered_paths
 
-    # Swap slide_NN.jpg -> wide_NN.jpg, keeping order and any inserted photos.
+    # Swap slide_NN.jpg -> <prefix>_NN.jpg, keeping order and any inserted photos.
     swapped = []
     for path in ordered_paths:
         name = os.path.basename(path)
-        wide = os.path.join(post_dir, name.replace("slide_", "wide_", 1))
-        swapped.append(wide if name.startswith("slide_") and os.path.exists(wide) else path)
+        redrawn = os.path.join(post_dir, name.replace("slide_", f"{prefix}_", 1))
+        swapped.append(redrawn if name.startswith("slide_") and os.path.exists(redrawn) else path)
     return swapped
 
 
 @app.post("/api/create_reel")
 def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = Header(default=None)):
     """
-    Stitches the already-generated card images for a post into an MP4 with a
-    cross-fade between cards — 9:16 for Instagram Reels, or 16:9 for YouTube.
-    The YouTube version redraws the cards on a 16:9 canvas so the frame is
-    filled edge to edge; nothing is ever cropped.
+    Stitches the already-generated card images for a post into an MP4 where each
+    card slides in from the right — 9:16 for Instagram Reels, or 16:9 for
+    YouTube. The cards are redrawn for the video first (see _video_cards), so the
+    YouTube frame is filled edge to edge with nothing cropped.
     """
     verify_access(x_access_key)
     try:
@@ -646,8 +657,7 @@ def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = He
         if payload.orientation not in PRESETS:
             raise HTTPException(status_code=400, detail=f"알 수 없는 영상 비율입니다: {payload.orientation}")
 
-        if payload.orientation == "horizontal":
-            slide_files = _landscape_cards(post_dir, slide_files)
+        slide_files = _video_cards(post_dir, slide_files, payload.orientation)
 
         reel_path = create_reel_video(slide_files, post_dir, orientation=payload.orientation)
 
