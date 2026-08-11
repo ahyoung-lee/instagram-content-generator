@@ -17,9 +17,9 @@ PRESETS = {
     # screen than the cards of copy that follow. Without it the cover uses
     # `seconds` like every other card.
     "vertical":   {"size": (720, 1280), "filename": "reel.mp4",      "label": "9:16",
-                   "seconds": 3.0, "first_seconds": 2.0},
+                   "seconds": 2.0, "first_seconds": 1.4},
     "horizontal": {"size": (1280, 720), "filename": "reel_wide.mp4", "label": "16:9",
-                   "seconds": 3.0},
+                   "seconds": 2.0},
 }
 FPS = 30
 
