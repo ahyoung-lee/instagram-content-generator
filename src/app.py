@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 from src.agent_trend import get_article_text, ArticleFetchError
-from src.agent_creative import generate_instagram_plan
+from src.agent_creative import generate_instagram_plan, generate_single_card_plan
 from src.script_vision import generate_carousel_images
 from src.script_instagram import publish_to_instagram
 
@@ -156,11 +156,15 @@ def _rerender_response(date_str: str, post_dir: str, data: dict) -> dict:
 @app.post("/api/generate")
 async def api_generate(
     url: Optional[str] = Form(default=None),
+    mode: str = Form(default="carousel"),
     background: Optional[UploadFile] = File(default=None),
     x_access_key: Optional[str] = Header(default=None),
 ):
     """
-    Builds a carousel for `url` (or today's trending topic when it is empty).
+    Builds a post for `url` (or today's trending topic when it is empty).
+
+    `mode` picks the format: "carousel" is the multi-card deck, "single" is the
+    one-card post whose headline and short body block share one image.
 
     An optional `background` photo replaces the AI-generated cover artwork: the
     uploaded image becomes this post's background master, so no paid image call
@@ -173,6 +177,9 @@ async def api_generate(
 
         # An empty form field arrives as "" -> treat it the same as "no URL".
         url = (url or "").strip() or None
+        mode = (mode or "carousel").strip().lower()
+        if mode not in ("carousel", "single"):
+            raise HTTPException(status_code=400, detail=f"알 수 없는 생성 모드입니다: {mode}")
 
         # Read the attached photo (if any) before anything expensive happens.
         custom_bg_bytes = None
@@ -183,8 +190,12 @@ async def api_generate(
             if not custom_bg_bytes:
                 raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
-        # Determine unique subfolder for this URL to isolate caching
+        # Determine unique subfolder for this URL to isolate caching. The mode is
+        # part of the key so a one-card post and a carousel built from the same
+        # article keep their own folder (and their own background master).
         url_normalized = (url or "trending_rss").strip().lower().rstrip('/')
+        if mode != "carousel":
+            url_normalized = f"{url_normalized}#{mode}"
         url_hash = hashlib.md5(url_normalized.encode('utf-8')).hexdigest()[:12]
 
         post_dir = os.path.join(SAVE_DIR, date_str, url_hash)
@@ -234,7 +245,10 @@ async def api_generate(
         scraped_url = trend_result.get("url", "N/A")
         
         # Step 2: Use LLM agent to create structured slide copy and captions
-        plan = generate_instagram_plan(title, content)
+        if mode == "single":
+            plan = generate_single_card_plan(title, content)
+        else:
+            plan = generate_instagram_plan(title, content)
 
         # The post title is the AI's click-worthy rewrite of the headline, not the
         # raw scraped one. The original is kept as source_title for reference.
@@ -269,6 +283,7 @@ async def api_generate(
         cache_content = {
             "requested_url": url,
             "request_count": request_count,
+            "mode": mode,
             "custom_background": bool(custom_bg_bytes),
             "title": title,
             "source_title": source_title,
@@ -288,6 +303,7 @@ async def api_generate(
         # Return plan along with the paths
         return {
             "success": True,
+            "mode": mode,
             "title": title,
             "url": scraped_url,
             "plan": plan,
@@ -337,6 +353,8 @@ async def api_insert_image(
         slide = _find_slide(data, page)
         if slide is None:
             raise HTTPException(status_code=400, detail="사진을 넣을 카드를 찾을 수 없습니다.")
+        if slide.get("type") == "single":
+            raise HTTPException(status_code=400, detail="1장 카드는 '사진 교체'로 배경 사진을 바꿔 주세요.")
         if slide.get("type") == "cover":
             raise HTTPException(status_code=400, detail="표지에는 사진을 넣을 수 없습니다.")
 
@@ -353,6 +371,46 @@ async def api_insert_image(
     except Exception as e:
         import traceback
         print(f"Insert image error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/replace_background")
+async def api_replace_background(
+    date_str: str = Form(...),
+    file: UploadFile = File(...),
+    x_access_key: Optional[str] = Header(default=None),
+):
+    """
+    Swaps the photo every card of a post is drawn on. Used by the one-card post,
+    whose photo *is* its background, but it works for a carousel too. The upload
+    becomes the new background master and the cards are redrawn from the stored
+    plan, so this never calls the paid image API.
+    """
+    verify_access(x_access_key)
+    try:
+        post_dir = os.path.join(SAVE_DIR, date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        if not (file.content_type or "").lower().startswith("image/"):
+            raise HTTPException(status_code=400, detail="이미지 파일만 첨부할 수 있습니다.")
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+        from src.script_vision import save_background_master
+        save_background_master(contents, post_dir)
+
+        data = _load_plan_data(post_dir)
+        data["custom_background"] = True
+        _save_plan_data(post_dir, data)
+
+        return _rerender_response(date_str, post_dir, data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Replace background error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/delete_image")
@@ -581,12 +639,13 @@ def api_prepare_download(payload: PrepareDownloadRequest, x_access_key: Optional
 
 # Cards for a video are always redrawn rather than reused from the carousel: the
 # cover's "옆으로 넘겨서 보기" prompt only makes sense on something swipeable, so a
-# video gets the brand sign-off instead. 16:9 additionally needs the whole layout
-# redrawn, since 4:5 cards could only fill that frame by cropping away more than
-# half their height. Each orientation maps to (canvas, filename prefix).
+# video gets the brand sign-off instead. 16:9 and the 9:16 Shorts cut additionally
+# need the whole layout redrawn, since a 4:5 card could only fill those frames by
+# cropping away a large part of it. Each orientation maps to (canvas, prefix).
 _VIDEO_CANVAS = {
     "vertical":   ("portrait",  "vreel"),
     "horizontal": ("landscape", "wide"),
+    "shorts":     ("story",     "shorts"),
 }
 
 

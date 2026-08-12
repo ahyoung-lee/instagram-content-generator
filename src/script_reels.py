@@ -20,6 +20,11 @@ PRESETS = {
                    "seconds": 2.0, "first_seconds": 1.4},
     "horizontal": {"size": (1280, 720), "filename": "reel_wide.mp4", "label": "16:9",
                    "seconds": 2.0},
+    # Shorts cut of a one-card post: the card is redrawn on a native 9:16 canvas
+    # (see the "story" canvas), so it fills the frame with no blurred bands, and
+    # it holds for the three seconds a Shorts clip needs.
+    "shorts":     {"size": (720, 1280), "filename": "shorts.mp4",   "label": "9:16 쇼츠",
+                   "seconds": 3.0, "first_seconds": 3.0},
 }
 FPS = 30
 

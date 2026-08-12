@@ -11,7 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;400;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260728">
+    <link rel="stylesheet" href="style.css?v=20260812">
 </head>
 
 <body>
@@ -36,8 +36,10 @@
                     <input type="url" id="url-input" placeholder="URL here :)" aria-label="URL 입력">
                     <button id="bg-upload-btn" class="btn-attach" type="button">📷 사진 첨부</button>
                     <button id="generate-btn" class="btn-primary">Generate</button>
+                    <button id="generate-one-btn" class="btn-primary btn-one" type="button">1 Card</button>
                 </div>
                 <p class="attach-hint">사진을 첨부하면 그 사진으로 <b>배경 이미지</b>를 만듭니다. 첨부하지 않고 생성하면 기존처럼 AI가 배경을 알아서 만들어요.</p>
+                <p class="attach-hint"><b>1 Card</b>를 누르면 여러 장 대신 <b>핵심만 담은 1장짜리 카드뉴스</b>를 만듭니다. 사진 첨부도 똑같이 되며, 첨부한 사진이 그 카드의 배경이 돼요.</p>
 
                 <div id="bg-file-row" class="bg-file-row hidden">
                     <img id="bg-file-thumb" class="bg-file-thumb" alt="첨부한 배경 사진 미리보기">
@@ -56,8 +58,8 @@
                 </div>
 
                 <div class="preview-container">
-                    <h4>카드뉴스 슬라이드 프리뷰</h4>
-                    <p class="insert-hint">각 카드의 <b>＋ 사진</b> 버튼을 누르면 그 카드 <b>상단에 사진</b>이 들어가고, 글은 작아지면서 아래쪽으로 내려갑니다. 표지에는 넣을 수 없어요.</p>
+                    <h4 id="preview-heading">카드뉴스 슬라이드 프리뷰</h4>
+                    <p class="insert-hint" id="insert-hint">각 카드의 <b>＋ 사진</b> 버튼을 누르면 그 카드 <b>상단에 사진</b>이 들어가고, 글은 작아지면서 아래쪽으로 내려갑니다. 표지에는 넣을 수 없어요.</p>
                     <div id="slides-grid" class="slides-grid">
                         <!-- Dynamic slides images will be loaded here -->
                     </div>
@@ -91,6 +93,10 @@
                     <a id="save-video-yt-btn" href="#" class="btn-accent btn-video hidden" download
                         style="text-decoration: none; align-items: center; justify-content: center; gap: 8px;">🎞️
                         유튜브 저장</a>
+                    <button id="shorts-btn" class="btn-accent btn-shorts hidden">⚡ 쇼츠 생성</button>
+                    <a id="save-shorts-btn" href="#" class="btn-accent btn-video hidden" download
+                        style="text-decoration: none; align-items: center; justify-content: center; gap: 8px;">🎞️
+                        쇼츠 저장</a>
                 </div>
             </section>
         </main>
@@ -135,7 +141,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=20260728"></script>
+    <script src="main.js?v=20260812"></script>
 </body>
 
 </html>

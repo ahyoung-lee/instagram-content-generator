@@ -4,7 +4,8 @@ let currentPostData = {
     caption: '',
     date_str: '',
     zip_url: '',
-    title: ''
+    title: '',
+    mode: 'carousel'   // 'carousel' = multi-card deck, 'single' = one-card post
 };
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
@@ -145,6 +146,7 @@ async function apiFetch(url, options = {}) {
 
 const urlInput = document.getElementById('url-input');
 const generateBtn = document.getElementById('generate-btn');
+const generateOneBtn = document.getElementById('generate-one-btn');
 const resultsSection = document.getElementById('results-section');
 const loadingOverlay = document.getElementById('loading-overlay');
 const dateBadge = document.getElementById('date-badge');
@@ -154,10 +156,14 @@ const copyCaptionBtn = document.getElementById('copy-caption-btn');
 const titleEditInput = document.getElementById('title-edit-input');
 const updateTitleBtn = document.getElementById('update-title-btn');
 const saveBtn = document.getElementById('save-btn');
+const previewHeading = document.getElementById('preview-heading');
+const insertHint = document.getElementById('insert-hint');
 const reelBtn = document.getElementById('reel-btn');
 const saveVideoBtn = document.getElementById('save-video-btn');
 const reelYtBtn = document.getElementById('reel-yt-btn');
 const saveVideoYtBtn = document.getElementById('save-video-yt-btn');
+const shortsBtn = document.getElementById('shorts-btn');
+const saveShortsBtn = document.getElementById('save-shorts-btn');
 
 // --- Background photo attached on the main screen ---
 // A photo picked here becomes the post's background image (used crisp on the
@@ -215,10 +221,10 @@ if (bgFileClear) {
     bgFileClear.addEventListener('click', () => setSelectedBgFile(null));
 }
 
-// Hide both "영상 저장" buttons (a previously built video is stale once the
+// Hide every "영상 저장" button (a previously built video is stale once the
 // underlying card images change).
 function resetReelButton() {
-    [saveVideoBtn, saveVideoYtBtn].forEach((btn) => {
+    [saveVideoBtn, saveVideoYtBtn, saveShortsBtn].forEach((btn) => {
         if (btn) {
             btn.classList.add('hidden');
             btn.href = '#';
@@ -234,6 +240,10 @@ let currentPhotoSlides = [];   // filenames of cards that already carry a photo
 let pendingPhotoTarget = null; // filename of the card awaiting a file pick
 let hiddenFileInput = null;
 
+// Sentinel target: the picked photo replaces the post's background instead of
+// going on top of one card (used by the one-card post, whose photo IS the card).
+const BACKGROUND_TARGET = '__background__';
+
 // A single reusable hidden file picker for photo insertion.
 function getHiddenFileInput() {
     if (!hiddenFileInput) {
@@ -244,17 +254,22 @@ function getHiddenFileInput() {
         document.body.appendChild(hiddenFileInput);
         hiddenFileInput.addEventListener('change', async (e) => {
             const file = e.target.files && e.target.files[0];
+            const target = pendingPhotoTarget;
             e.target.value = ''; // allow re-selecting the same file next time
-            if (file && pendingPhotoTarget !== null) {
-                await attachPhotoTo(pendingPhotoTarget, file);
-            }
             pendingPhotoTarget = null;
+            if (!file || target === null) return;
+            if (target === BACKGROUND_TARGET) {
+                await replaceBackgroundWith(file);
+            } else {
+                await attachPhotoTo(target, file);
+            }
         });
     }
     return hiddenFileInput;
 }
 
-// Opens the file picker; the chosen photo goes on top of card `filename`.
+// Opens the file picker; the chosen photo goes on top of card `filename`
+// (or becomes the post background when `filename` is BACKGROUND_TARGET).
 function triggerPhotoFor(filename) {
     if (!currentPostData.date_str) {
         alert('먼저 콘텐츠를 생성해 주세요.');
@@ -262,6 +277,34 @@ function triggerPhotoFor(filename) {
     }
     pendingPhotoTarget = filename;
     getHiddenFileInput().click();
+}
+
+// Redraws the post on a newly uploaded background photo. Costs no API call:
+// the card copy is reused from the saved plan.
+async function replaceBackgroundWith(file) {
+    loadingOverlay.classList.remove('hidden');
+    try {
+        const form = new FormData();
+        form.append('date_str', currentPostData.date_str);
+        form.append('file', file);
+
+        const response = await apiFetch('/api/replace_background', { method: 'POST', body: form });
+        if (!response.ok) {
+            let msg = `서버 에러 (상태 코드: ${response.status})`;
+            try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+            throw new Error(msg);
+        }
+        const data = await response.json();
+        if (data.success) {
+            renderSlidesPreview(data.image_urls, data.photo_slides);
+            resetReelButton();
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`배경 사진 변경 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
 }
 
 async function attachPhotoTo(filename, file) {
@@ -348,8 +391,10 @@ async function deleteImage(filename) {
 
 // Helper to render slides in grid
 function renderSlidesPreview(imageUrls, photoSlides) {
+    const isSingle = currentPostData.mode === 'single';
     currentImageUrls = imageUrls.slice();
     currentPhotoSlides = Array.isArray(photoSlides) ? photoSlides.slice() : currentPhotoSlides;
+    slidesGrid.classList.toggle('single-card', isSingle);
     slidesGrid.innerHTML = '';
     imageUrls.forEach((url, index) => {
         const filename = url.split('/').pop().split('?')[0];
@@ -411,8 +456,22 @@ function renderSlidesPreview(imageUrls, photoSlides) {
             wrapper.appendChild(del);
         }
 
+        // The one-card post is drawn straight onto its background photo, so its
+        // button swaps that photo instead of stacking one on top of the card.
+        if (isSingle) {
+            const bg = document.createElement('button');
+            bg.type = 'button';
+            bg.className = 'slide-insert-btn';
+            bg.textContent = '📷 사진 교체';
+            bg.title = '이 카드의 배경 사진 바꾸기';
+            bg.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerPhotoFor(BACKGROUND_TARGET);
+            });
+            wrapper.appendChild(bg);
+        }
         // "Put a photo on top of this card" button (not on the cover or legacy photo cards).
-        if (!isExtra && !isCover) {
+        else if (!isExtra && !isCover) {
             const ins = document.createElement('button');
             ins.type = 'button';
             ins.className = 'slide-insert-btn';
@@ -438,8 +497,36 @@ function renderSlidesPreview(imageUrls, photoSlides) {
 }
 
 // 1. Generate Content
-generateBtn.addEventListener('click', async () => {
-    const url = urlInput.value.strip ? urlInput.value.strip() : urlInput.value.trim();
+// The two buttons run the same pipeline; `mode` picks the format:
+// 'carousel' = the multi-card deck, 'single' = a one-card post.
+const MODE_COPY = {
+    carousel: {
+        heading: '카드뉴스 슬라이드 프리뷰',
+        hint: '각 카드의 <b>＋ 사진</b> 버튼을 누르면 그 카드 <b>상단에 사진</b>이 들어가고, 글은 작아지면서 아래쪽으로 내려갑니다. 표지에는 넣을 수 없어요.'
+    },
+    single: {
+        heading: '1장 카드뉴스 프리뷰',
+        hint: '카드에 마우스를 올리면 나오는 <b>📷 사진 교체</b> 버튼으로 배경 사진을 바꿀 수 있어요. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)'
+    }
+};
+
+// Reshapes the results area for the format that was just generated. A one-card
+// post has nothing to swipe through, so the reel/YouTube buttons step aside and
+// the 3-second shorts cut takes their place.
+function applyModeUI(mode) {
+    const copy = MODE_COPY[mode] || MODE_COPY.carousel;
+    if (previewHeading) previewHeading.textContent = copy.heading;
+    if (insertHint) insertHint.innerHTML = copy.hint;
+
+    const isSingle = mode === 'single';
+    [reelBtn, reelYtBtn].forEach((btn) => {
+        if (btn) btn.classList.toggle('hidden', isSingle);
+    });
+    if (shortsBtn) shortsBtn.classList.toggle('hidden', !isSingle);
+}
+
+async function runGenerate(mode) {
+    const url = urlInput.value.trim();
 
     // Ask for the password first (only the first time), before any loading UI.
     if (!(await ensureAccessKey())) {
@@ -456,6 +543,7 @@ generateBtn.addEventListener('click', async () => {
         // (No Content-Type header: the browser sets the multipart boundary.)
         const form = new FormData();
         form.append('url', url || '');
+        form.append('mode', mode);
         if (selectedBgFile) form.append('background', selectedBgFile);
 
         const response = await apiFetch('/api/generate', { method: 'POST', body: form });
@@ -475,7 +563,9 @@ generateBtn.addEventListener('click', async () => {
             currentPostData.date_str = data.date_str;
             currentPostData.zip_url = data.zip_url;
             currentPostData.title = data.title;
-            
+            currentPostData.mode = data.mode || 'carousel';
+            applyModeUI(currentPostData.mode);
+
             // Populate UI Elements
             dateBadge.textContent = data.date_str.split('/')[0];
             captionText.value = data.plan.final_caption;
@@ -503,7 +593,12 @@ generateBtn.addEventListener('click', async () => {
         // Hide Loading Overlay
         loadingOverlay.classList.add('hidden');
     }
-});
+}
+
+generateBtn.addEventListener('click', () => runGenerate('carousel'));
+if (generateOneBtn) {
+    generateOneBtn.addEventListener('click', () => runGenerate('single'));
+}
 
 // 2. Copy Caption to Clipboard
 copyCaptionBtn.addEventListener('click', () => {
@@ -710,6 +805,17 @@ reelYtBtn.addEventListener('click', () => buildVideo({
     label: '유튜브',
     downloadName: 'youtube.mp4'
 }));
+
+// The one-card post's 3-second 9:16 cut for Shorts/Reels.
+if (shortsBtn) {
+    shortsBtn.addEventListener('click', () => buildVideo({
+        orientation: 'shorts',
+        button: shortsBtn,
+        saveButton: saveShortsBtn,
+        label: '쇼츠',
+        downloadName: 'shorts.mp4'
+    }));
+}
 
 // Initialize backgrounds on load
 window.addEventListener('DOMContentLoaded', () => {

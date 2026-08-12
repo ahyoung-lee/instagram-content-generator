@@ -14,6 +14,53 @@ AVAILABLE_THEMES = ["orange", "blue", "green", "purple", "pink", "teal", "yellow
 # Hard ceiling on deck length: one cover + up to nine content cards.
 MAX_SLIDES = 10
 
+# High-quality Korean copywriter persona shared across all model calls.
+SYSTEM_PROMPT = (
+    "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 깊이 있는 정보 분석가다. "
+    "기사를 꼼꼼히 정독해 핵심 요점을 하나도 빠짐없이 뽑아내고, 각 요점을 "
+    "구체적인 수치·사실·근거·실전 팁 중심으로 밀도 있게 정리한다. "
+    "2번째 카드뉴스(content)부터는 각 슬라이드가 '하나의 핵심 요점'만 깊이 있게 다루도록 한다. "
+    "이모지나 이모티콘은 절대 사용하지 않고, 오직 텍스트만으로 깔끔하고 정돈되게 작성한다. "
+    "본문(main_text)은 의미 단위(구/절)로 자연스럽게 줄바꿈(\\n)하되, 조사(을/를/이/가/와/과/의)나 "
+    "접속사로 줄을 끝내지 않는다. 각 content 슬라이드에서 가장 핵심적인 문장 1개는 반드시 **문장** 형태로 "
+    "감싸 키컬러 강조 대상으로 표시하고, 기사 분위기에 맞는 색상 테마(theme)를 정확히 하나 고른다. "
+    "근거 없는 추측이나 밋밋한 텍스트 나열은 절대 허용하지 않는다."
+)
+
+# Same persona, tuned for the one-card post: there is no next slide to continue
+# on, so everything has to survive inside a single image.
+SYSTEM_PROMPT_SINGLE = (
+    "너는 인스타그램 트래픽을 지배하는 천재 카피라이터다. "
+    "지금 만드는 것은 넘겨 보는 카드뉴스가 아니라 '단 한 장'짜리 카드뉴스다. "
+    "독자가 스크롤을 멈추고 3초 안에 핵심을 다 파악할 수 있도록, 기사에서 가장 중요한 사실만 "
+    "골라 짧고 강한 문장으로 압축한다. 설명을 길게 늘어놓지 않고, 구체적인 수치·사실 중심으로 쓴다. "
+    "이모지나 이모티콘은 절대 사용하지 않고, 근거 없는 추측이나 기사에 없는 내용은 절대 쓰지 않는다."
+)
+
+
+def _request_plan(client, system_prompt: str, prompt: str) -> dict:
+    """
+    Asks the model for a JSON plan and parses it.
+
+    Primary model: gpt-4o-mini (this project's API key currently has no access to
+    gpt-4o). gpt-3.5-turbo is kept only as a safety fallback.
+    """
+    kwargs = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.75,
+        "max_tokens": 3000,
+    }
+    try:
+        response = client.chat.completions.create(model="gpt-4o-mini", **kwargs)
+    except Exception as chat_err:
+        print(f"gpt-4o-mini failed: {chat_err}. Trying gpt-3.5-turbo fallback...")
+        response = client.chat.completions.create(model="gpt-3.5-turbo", **kwargs)
+    return json.loads(response.choices[0].message.content)
+
 def _normalize_slides(plan: dict) -> dict:
     """Drops the retired closing card, caps the deck at MAX_SLIDES and renumbers.
 
@@ -122,48 +169,9 @@ JSON 스키마:
 }}
 """
 
-        # High-quality Korean copywriter persona shared across all model calls.
-        system_prompt = (
-            "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 깊이 있는 정보 분석가다. "
-            "기사를 꼼꼼히 정독해 핵심 요점을 하나도 빠짐없이 뽑아내고, 각 요점을 "
-            "구체적인 수치·사실·근거·실전 팁 중심으로 밀도 있게 정리한다. "
-            "2번째 카드뉴스(content)부터는 각 슬라이드가 '하나의 핵심 요점'만 깊이 있게 다루도록 한다. "
-            "이모지나 이모티콘은 절대 사용하지 않고, 오직 텍스트만으로 깔끔하고 정돈되게 작성한다. "
-            "본문(main_text)은 의미 단위(구/절)로 자연스럽게 줄바꿈(\\n)하되, 조사(을/를/이/가/와/과/의)나 "
-            "접속사로 줄을 끝내지 않는다. 각 content 슬라이드에서 가장 핵심적인 문장 1개는 반드시 **문장** 형태로 "
-            "감싸 키컬러 강조 대상으로 표시하고, 기사 분위기에 맞는 색상 테마(theme)를 정확히 하나 고른다. "
-            "근거 없는 추측이나 밋밋한 텍스트 나열은 절대 허용하지 않는다."
-        )
+        data = _request_plan(client, SYSTEM_PROMPT, prompt)
 
-        # Primary model: gpt-4o-mini (this project's API key currently has no
-        # access to gpt-4o). gpt-3.5-turbo is kept only as a safety fallback.
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.75,
-                max_tokens=3000
-            )
-        except Exception as chat_err:
-            print(f"gpt-4o-mini failed: {chat_err}. Trying gpt-3.5-turbo fallback...")
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.75,
-                max_tokens=3000
-            )
-        
-        result_content = response.choices[0].message.content
-        data = json.loads(result_content)
-        
+
         # Validate keys in response
         required_keys = ["total_pages", "hooking_title", "slides", "final_caption"]
         if all(key in data for key in required_keys):
@@ -185,6 +193,145 @@ JSON 스키마:
         fallback_copy["image_prompt"] = f"A photorealistic editorial photograph representing {article_title[:20]}, real objects and natural materials, soft directional daylight, shallow depth of field, dark uncluttered bottom third."
         fallback_copy["theme"] = random.choice(AVAILABLE_THEMES)
         return fallback_copy
+
+
+# --- One-card post ---------------------------------------------------------
+# The single card is rendered by the "single" slide layout: `main_text` is the
+# headline drawn large, `sub_text` is the short body block underneath it. Both
+# live on one slide so the rest of the pipeline (render, title edit, zip,
+# caption) works unchanged.
+
+def _single_card_plan(headline: str, card_text: str, caption: str, image_prompt: str) -> dict:
+    """Wraps one-card copy in the same plan shape the renderer expects."""
+    return {
+        "total_pages": 1,
+        "theme": random.choice(AVAILABLE_THEMES),
+        "hooking_title": headline,
+        "slides": [
+            {
+                "page": 1,
+                "type": "single",
+                "main_text": headline,
+                "sub_text": card_text,
+            }
+        ],
+        "final_caption": caption,
+        "image_prompt": image_prompt,
+    }
+
+
+def generate_single_card_plan(article_title: str, article_content: str) -> dict:
+    """
+    Builds a one-card post from an article: a hooking headline plus a 3~4 line
+    body block that has to carry the whole story on a single image, along with
+    the feed caption and the background image prompt.
+    """
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    fallback_response = _single_card_plan(
+        headline="AI로 카드뉴스 만드는 시간, 3분이면 끝",
+        card_text=(
+            "기사 링크 하나만 넣으면\n"
+            "**핵심만 담은 카드 한 장이 완성돼요**\n"
+            "본문 캡션과 해시태그까지 함께 나옵니다"
+        ),
+        caption=(
+            "콘텐츠 하나 만드는 데 몇 시간씩 쓰고 계신가요.\n"
+            "기사 링크만 넣으면 카드 한 장이 통째로 나옵니다.\n"
+            "본문과 해시태그까지 함께 완성돼요.\n\n"
+            "· 실시간 트렌드를 읽어 카드뉴스를 자동 제작\n"
+            "· 최적화된 본문과 해시태그까지 한 번에 완성\n\n"
+            "#인스타그램자동화 #AI마케팅 #콘텐츠제작 #부업추천"
+        ),
+        image_prompt=(
+            "A photorealistic photograph of a modern laptop and smartphone on a dark walnut desk, "
+            "soft window light from the side, shallow depth of field, realistic metal and glass texture, "
+            "empty dark surface across the bottom third."
+        ),
+    )
+
+    if not openai_key or "your_openai_api_key" in openai_key:
+        print("Warning: OPENAI_API_KEY is not configured or invalid. Using mock fallback data.")
+        return fallback_response
+
+    try:
+        client = OpenAI(api_key=openai_key)
+
+        prompt = f"""
+다음 뉴스 기사를 기반으로, 인스타그램에 올릴 **1장짜리 카드뉴스**와 피드 업로드용 본문 캡션을 작성해줘.
+여러 장을 넘겨 보는 카드뉴스가 아니라, 딱 한 장의 이미지 안에서 핵심이 전부 전달돼야 해.
+
+[뉴스 제목]: {article_title}
+[뉴스 내용]: {article_content}
+
+[작성 요구사항]:
+1. (매우 중요) `hooking_title`은 카드 한 장의 대제목으로 이미지에 크게 박히는 문장이야. 기사 제목을 그대로 쓰지 말고, 클릭률이 훨씬 높아지도록 새로 써줘.
+   - 원문 제목의 사실관계는 그대로 지키되, 표현만 인스타그램 피드에서 손이 멈추는 문장으로 바꿔줘. 기사에 없는 내용을 지어내거나 과장해서 낚시성 제목을 만들면 안 돼.
+   - 다음 중 하나 이상을 활용해: 구체적인 숫자(금액·기간·비율·개수), 독자에게 돌아오는 이득이나 손해, 의외성 있는 사실, "왜 / 어떻게"로 이어지는 궁금증.
+   - 20자 내외의 짧고 강한 문장으로, 신문 기사체("~해", "~밝혀", "~한다")가 아니라 독자에게 말 거는 구어체로 써줘.
+   - 예시: "정부, 청년 월세 지원 확대 시행" -> "월세 20만원, 몰라서 못 받는 청년들"
+2. `card_text`는 대제목 아래에 들어가는 본문 블록이야. 기사를 꼼꼼히 정독해서 독자가 꼭 알아야 할 핵심만 **정확히 3~4줄**로 압축해줘.
+   - 카드가 한 장뿐이라 뒤에 이어지는 슬라이드가 없어. 그러니 '무엇이 어떻게 됐는지'와 '그래서 독자에게 뭐가 달라지는지'가 이 3~4줄 안에 다 들어가야 해.
+   - 각 줄은 18자 내외의 완결된 구/절로 쓰고 `\\n`으로 구분해줘. 조사(을/를/이/가/은/는/와/과/의/로)나 접속사로 줄을 끝내지 마.
+   - 구체적인 수치·날짜·금액·비율 같은 사실을 반드시 포함하고, 기사에 없는 내용은 절대 지어내지 마.
+   - '·', '-' 같은 목록 기호는 붙이지 말고, 대제목(`hooking_title`) 문장을 그대로 반복하지 마.
+   - (매우 중요) 이 중 독자가 꼭 기억해야 할 **가장 핵심적인 한 줄**을 골라 그 줄 전체를 `**문장**` 형태로 감싸줘. 강조는 딱 1줄만.
+3. (매우 중요) 이모지·이모티콘·특수 픽토그램은 어디에도 절대 넣지 마. 오직 한글/숫자/기본 문장부호만 사용해. (단, 캡션 맨 끝의 해시태그는 예외)
+4. `final_caption`은 장황하게 늘어놓지 말고, 독자가 스크롤하며 3초 안에 핵심을 파악할 수 있도록 아래 구조로 밀도 있게 작성해줘 (매우 중요):
+   - (1) 도입 3줄: `hooking_title`과 바로 이어지는 내용을 정확히 3줄로 써줘. 제목이 던진 궁금증을 받아서 '무엇이 어떻게 됐는지'를 자연스러운 문장으로 풀어주는 도입부야. 각 줄은 20~35자 정도의 완결된 문장으로 쓰고, '·' 같은 목록 기호는 붙이지 마.
+   - (2) 핵심 정리: 기사에서 독자가 꼭 알아야 할 핵심 요점 2~3개만 골라, 각 항목을 짧은 한 줄로 간결하게 정리해. 각 줄 앞에 '·' 기호를 붙여줘. 카드에 다 담지 못한 배경·근거를 여기서 보충해줘.
+   - (3) 공식사이트: 기사에 공식 홈페이지·신청 페이지 주소나 사이트명이 실제로 언급된 경우에만 맨 마지막 블록으로 한 줄 적어줘. (예: "· 공식사이트: example.go.kr") 기사에 없으면 이 블록 자체를 통째로 생략해. 절대 주소를 지어내지 마.
+   - 각 블록 사이에는 `\\n\\n`으로 여백을 줘. 별도의 마무리 CTA 문구는 넣지 마.
+   - 본문 맨 마지막 줄에는 기사의 핵심 키워드를 반영한 대표 해시태그를 딱 4개만 공백으로 구분해서 한 줄에 적어줘. 정확히 4개여야 해.
+5. (매우 중요) `image_prompt`는 카드 배경 사진을 만드는 영문 프롬프트야. 제공된 기사에서 대표 키워드를 뽑고, 그 키워드에 맞는 **실사 사진(photorealistic photograph)** 스타일로 써줘. 일러스트, 3D 렌더링, CGI, 만화, 벡터 아트는 절대 쓰지 마. 실제 사진작가가 카메라로 찍을 수 있는 장면(구체적인 사물, 풍경, 건축물, 클로즈업 질감)만 묘사해줘. 텍스트(글자), 워터마크, 서명, 로고, 사람 얼굴과 인물은 절대 넣지 마. 주제를 대표하는 피사체를 화면 위쪽 1/3에 배치하고, 아래쪽 2/3는 단순하고 어둡게 비워두라고 명시해줘 (그 위에 제목과 본문 글씨가 통째로 올라가기 때문).
+6. 카드 강조 색상 테마(`theme`)는 시스템이 랜덤으로 배정하니 신경 쓰지 않아도 돼.
+
+반드시 아래 JSON 스키마 구조의 유효한 JSON 객체로만 응답해야 해. 다른 부가적인 텍스트(예: ```json 등)는 제외해줘.
+
+JSON 스키마:
+{{
+  "hooking_title": "카드에 크게 들어갈 대제목",
+  "card_text": "첫째 줄 핵심\\n**가장 중요한 한 줄**\\n셋째 줄 핵심",
+  "theme": "blue",
+  "final_caption": "제목과 이어지는 도입 첫째 줄\\n둘째 줄\\n셋째 줄\\n\\n· 핵심 요점 1\\n· 핵심 요점 2\\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4",
+  "image_prompt": "A detailed English prompt for a photorealistic photograph based on the selected keywords"
+}}
+"""
+
+        data = _request_plan(client, SYSTEM_PROMPT_SINGLE, prompt)
+
+        headline = (data.get("hooking_title") or "").strip()
+        card_text = (data.get("card_text") or "").strip()
+        caption = (data.get("final_caption") or "").strip()
+        if not headline or not card_text or not caption:
+            raise ValueError("Response missing required keys")
+
+        return _single_card_plan(
+            headline=headline,
+            card_text=card_text,
+            caption=caption,
+            image_prompt=(data.get("image_prompt") or headline).strip(),
+        )
+
+    except Exception as e:
+        print(f"Error generating single card via OpenAI: {e}")
+        # Fall back to article-specific basic copy if the API fails
+        return _single_card_plan(
+            headline=f"이슈 정리: {article_title[:20]}",
+            card_text=f"{article_content[:40]}\n**지금 가장 주목받는 핵심 이슈**\n놓치면 안 되는 배경과 포인트",
+            caption=(
+                f"{article_title}\n\n"
+                "· 지금 가장 주목받는 핵심 이슈 정리\n"
+                "· 놓치면 안 되는 배경과 포인트\n\n"
+                "#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석"
+            ),
+            image_prompt=(
+                f"A photorealistic editorial photograph representing {article_title[:20]}, "
+                "real objects and natural materials, soft directional daylight, shallow depth of field, "
+                "dark uncluttered bottom two thirds."
+            ),
+        )
+
 
 if __name__ == "__main__":
     # Test execution

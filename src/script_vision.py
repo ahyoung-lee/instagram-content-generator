@@ -45,6 +45,28 @@ CANVASES = {
             "teaser_text": "옆으로 넘겨서 보기 ▶",
             "teaser_text_video": "always good",
         },
+        # The one-card post: headline plus a short body block, both sitting on
+        # the darkened lower half of the photo. It carries more copy than a
+        # cover, so its gradient starts higher and reaches full strength sooner.
+        "single": {
+            "grad_start": 260,
+            "grad_full": 620,
+            "grad_alpha": 232,
+            "badge_text": "TODAY'S ISSUE",
+            "badge_font": 22,
+            "badge_h": 45,
+            "badge_gap": 30,          # badge bottom -> headline top
+            "title_wrap": 920,
+            "body_wrap": 880,
+            "title_body_gap": 38,
+            # (headline size, headline line height, body size, body line height)
+            "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
+            "block_bottom": 168,      # bottom edge of the text block, from H
+            "block_top_min": 430,     # never push the block higher (keeps the photo visible)
+            "sign_from_bottom": 118,
+            "sign_font": 26,
+            "sign_text": "always good",
+        },
         "card": {
             "box": (80, 240, 1000, 1130),
             "wrap": 820,
@@ -84,6 +106,24 @@ CANVASES = {
             # swipe-prompt variant to choose between.
             "teaser_text": "always good",
         },
+        "single": {
+            "grad_start": 150,
+            "grad_full": 430,
+            "grad_alpha": 232,
+            "badge_text": "TODAY'S ISSUE",
+            "badge_font": 26,
+            "badge_h": 48,
+            "badge_gap": 28,
+            "title_wrap": 1350,
+            "body_wrap": 1300,
+            "title_body_gap": 34,
+            "steps": ((88, 116, 44, 68), (78, 102, 40, 62), (68, 90, 36, 56), (60, 80, 32, 50)),
+            "block_bottom": 150,
+            "block_top_min": 250,
+            "sign_from_bottom": 100,
+            "sign_font": 30,
+            "sign_text": "always good",
+        },
         "card": {
             # Kept well inside the frame: a card spanning the full 1920 would
             # push lines past a comfortable reading length.
@@ -98,6 +138,64 @@ CANVASES = {
             "photo_min": 220, "photo_max": 430,
             "min_line": 48, "min_line_photo": 40,
             "badge_h": 48,
+        },
+    },
+    "story": {
+        # 9:16 for a Shorts/Reels cut. Drawn at 1080x1920 and scaled down by the
+        # video step, so the card fills the phone screen with nothing cropped and
+        # no blurred bands. The bottom 380px (~20% of the frame) is left empty:
+        # that band is where the Shorts player stacks its title, handle and
+        # buttons, so nothing of the card may sit there.
+        "size": (1080, 1920),
+        "margin": 80,
+        "watermark_pos": (50, 50),
+        "watermark_width": 160,
+        "bar_from_bottom": (380, 376),
+        "page_from_bottom": 436,
+        "page_font": 26,
+        "cover": {
+            "grad_start": 810,
+            "badge_box": (80, 1000, 390, 1045),
+            "badge_font": 22,
+            "title_top": 1080,
+            "title_wrap": 920,
+            "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
+            "teaser_from_bottom": 490,
+            "teaser_clear": 500,
+            "teaser_font": 26,
+            "teaser_text": "옆으로 넘겨서 보기 ▶",
+            "teaser_text_video": "always good",
+        },
+        "single": {
+            "grad_start": 430,
+            "grad_full": 850,
+            "grad_alpha": 232,
+            "badge_text": "TODAY'S ISSUE",
+            "badge_font": 22,
+            "badge_h": 45,
+            "badge_gap": 30,
+            "title_wrap": 920,
+            "body_wrap": 880,
+            "title_body_gap": 38,
+            "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
+            "block_bottom": 530,
+            "block_top_min": 600,
+            "sign_from_bottom": 470,
+            "sign_font": 26,
+            "sign_text": "always good",
+        },
+        "card": {
+            "box": (80, 390, 1000, 1390),
+            "wrap": 820,
+            "badge_top": 430,
+            "text_top": 510,
+            "body": 43, "line": 70,
+            "body_photo": 34, "line_photo": 54,
+            "cta": 46, "cta_line": 80,
+            "cta_photo": 36, "cta_line_photo": 56,
+            "photo_min": 340, "photo_max": 700,
+            "min_line": 50, "min_line_photo": 40,
+            "badge_h": 45,
         },
     },
 }
@@ -332,6 +430,27 @@ def format_korean_line_breaks(text: str) -> str:
     text = re.sub(r'[ \t]*\n[ \t]*', '\n', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
+
+def break_after_commas(text: str) -> str:
+    """
+    Starts a new line after every comma, so a card never carries a clause past a
+    pause. The comma stays at the end of the line it ends.
+
+    A comma sitting between two digits ("1,000원") is a thousands separator, not
+    a pause, so it is left alone. Each source line is processed on its own, which
+    keeps a line that ends in a comma from producing an empty line.
+    """
+    if not text:
+        return text
+
+    SEPARATOR = "\x00"  # stands in for thousands separators while we split
+    lines = []
+    for line in text.split("\n"):
+        protected = re.sub(r'(?<=\d),(?=\d)', SEPARATOR, line)
+        broken = re.sub(r',[ \t]*', ',\n', protected)
+        lines.append(broken.replace(SEPARATOR, ",").rstrip())
+    return "\n".join(lines)
+
 
 def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, stroke_fill=None, **kwargs):
     """
@@ -769,6 +888,22 @@ def paste_slide_photo(image: Image.Image, photo_path: str, x0: int, y0: int, x1:
     image.paste(photo, (x0, y0), mask)
 
 
+def apply_dark_gradient(image: Image.Image, width: int, height: int, start_y: int,
+                        max_alpha: int, full_y: int = None) -> Image.Image:
+    """
+    Darkens an image from `start_y` downwards so white copy stays readable on top
+    of a photo. The overlay fades in linearly and reaches `max_alpha` at `full_y`
+    (the bottom edge by default), holding it from there down.
+    """
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    g_draw = ImageDraw.Draw(overlay)
+    span = max(1, (full_y or height) - start_y)
+    for y in range(start_y, height):
+        alpha = min(max_alpha, int(max_alpha * (y - start_y) / span))
+        g_draw.line([(0, y), (width, y)], fill=(10, 10, 15, alpha))
+    return Image.alpha_composite(image, overlay)
+
+
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS, for_video: bool = False) -> Image.Image:
     """
     Generates a single image slide based on its content and type.
@@ -790,15 +925,20 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
     cover_spec = spec["cover"]
     card_spec = spec["card"]
 
+    # The cover and the one-card post both write straight onto the photo, so they
+    # keep it crisp and darken it from a gradient instead of blurring it.
+    full_bleed = slide_type in ("cover", "single")
+    single_spec = spec["single"]
+
     if bg_image is not None:
         # We make a copy of the pre-resized cover image
         image = bg_image.copy()
-        
+
         # Ensure RGBA mode
         if image.mode != "RGBA":
             image = image.convert("RGBA")
-            
-        if slide_type != "cover":
+
+        if not full_bleed:
             # Light blur on content slides: enough to keep the copy card readable
             # while the photo behind it stays recognizable (a 15px blur turned it
             # into an unreadable smear).
@@ -806,18 +946,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             # Draw standard transparent overlay for content slides
             overlay = Image.new("RGBA", (W, H), (10, 10, 15, 70)) # ~27% opacity
             image = Image.alpha_composite(image, overlay)
+        elif slide_type == "single":
+            image = apply_dark_gradient(image, W, H, single_spec["grad_start"],
+                                        single_spec["grad_alpha"], single_spec["grad_full"])
         else:
             # For Cover Slide: Crisp background with bottom-up dark gradient shadow
-            gradient_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-            g_draw = ImageDraw.Draw(gradient_overlay)
-            start_y = cover_spec["grad_start"]
-            end_y = H
-            for y in range(start_y, end_y):
-                # Calculate alpha: linear transition from 0 to 240
-                alpha = int(240 * (y - start_y) / (end_y - start_y))
-                # Draw a horizontal line
-                g_draw.line([(0, y), (W, y)], fill=(10, 10, 15, alpha))
-            image = Image.alpha_composite(image, gradient_overlay)
+            image = apply_dark_gradient(image, W, H, cover_spec["grad_start"], 240)
     else:
         # Fallback to premium gradient (theme-tinted) if bg_image is None
         color_start = theme_data["grad_start"]
@@ -826,16 +960,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         if image.mode != "RGBA":
             image = image.convert("RGBA")
 
-        if slide_type == "cover":
-            # Still apply the bottom gradient overlay for consistency on fallback
-            gradient_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-            g_draw = ImageDraw.Draw(gradient_overlay)
-            start_y = cover_spec["grad_start"]
-            end_y = H
-            for y in range(start_y, end_y):
-                alpha = int(220 * (y - start_y) / (end_y - start_y))
-                g_draw.line([(0, y), (W, y)], fill=(10, 10, 15, alpha))
-            image = Image.alpha_composite(image, gradient_overlay)
+        # Still apply the bottom gradient overlay for consistency on fallback
+        if slide_type == "single":
+            image = apply_dark_gradient(image, W, H, single_spec["grad_start"],
+                                        single_spec["grad_alpha"], single_spec["grad_full"])
+        elif slide_type == "cover":
+            image = apply_dark_gradient(image, W, H, cover_spec["grad_start"], 220)
 
     draw = ImageDraw.Draw(image)
 
@@ -845,13 +975,15 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
     # Page indicator, centered at the bottom of every card just above the accent
     # bar. It sits outside the content card, so drawing it here (before the card
-    # is composited on top) is safe for every slide type.
+    # is composited on top) is safe for every slide type. A one-card post has no
+    # pages to count, so it is skipped there.
     page_num = slide.get("page", 1)
-    page_text = f"{page_num} / {total_pages}"
-    page_font = get_system_font(spec["page_font"])
-    page_w = _text_width(page_font, page_text)
-    draw.text(((W - page_w) // 2, H - spec["page_from_bottom"]), page_text,
-              fill=(180, 180, 180, 220), font=page_font)
+    if total_pages > 1:
+        page_text = f"{page_num} / {total_pages}"
+        page_font = get_system_font(spec["page_font"])
+        page_w = _text_width(page_font, page_text)
+        draw.text(((W - page_w) // 2, H - spec["page_from_bottom"]), page_text,
+                  fill=(180, 180, 180, 220), font=page_font)
 
     if slide_type == "cover":
         # Cover Page Layout (No card, text drawn directly on bottom gradient)
@@ -872,6 +1004,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
         title_text, _ = strip_highlight_markers(title_text)
         title_text = remove_emojis(title_text)
+        title_text = break_after_commas(title_text)
 
         # Fit the hook: start at a large size and step down if it wraps to many
         # lines, so the title never overflows into the teaser instead of being
@@ -901,7 +1034,85 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             teaser_text = cover_spec.get("teaser_text_video", teaser_text)
         teaser_font = get_system_font(cover_spec["teaser_font"])
         draw.text((margin, H - cover_spec["teaser_from_bottom"]), teaser_text, fill=key_color, font=teaser_font)
-        
+
+    elif slide_type == "single":
+        # One-card post: the whole story lives on this single image, so the
+        # headline (main_text) is followed by a short body block (sub_text)
+        # instead of continuing onto a next card.
+        headline = (slide.get("main_text") or "").strip()
+        if not headline:
+            headline = (article_title or hooking_title or "").strip()
+        headline, _ = strip_highlight_markers(headline)
+        headline = remove_emojis(headline)
+        headline = break_after_commas(headline)
+
+        body_text = break_after_commas(remove_emojis((slide.get("sub_text") or "").strip()))
+
+        badge_h = single_spec["badge_h"]
+        block_bottom = H - single_spec["block_bottom"]
+        block_top_min = single_spec["block_top_min"]
+
+        # Step the type down until headline + body fit above the sign-off line;
+        # the smallest step is the floor, so very long copy just gets tighter.
+        for title_size, title_line, body_size, body_line in single_spec["steps"]:
+            title_font = get_system_font(title_size, bold=True)
+            body_font = get_system_font(body_size)
+            body_font_bold = get_system_font(body_size, bold=True)
+
+            title_lines = wrap_text(headline, title_font, single_spec["title_wrap"])
+
+            # One line of the body is wrapped in **...**: that is the sentence the
+            # reader should remember, so it gets the theme's key color.
+            body_lines = []
+            for logical in body_text.split("\n"):
+                if not logical.strip():
+                    continue
+                clean, has_highlight = strip_highlight_markers(logical)
+                line_font = body_font_bold if has_highlight else body_font
+                line_color = key_color if has_highlight else (226, 228, 234, 255)
+                for sub in wrap_text(clean.strip(), line_font, single_spec["body_wrap"]):
+                    body_lines.append((sub, line_font, line_color))
+
+            block_height = badge_h + single_spec["badge_gap"] + len(title_lines) * title_line
+            if body_lines:
+                block_height += single_spec["title_body_gap"] + len(body_lines) * body_line
+            if block_bottom - block_height >= block_top_min:
+                break
+
+        # Anchor the block to the bottom, growing upwards as the copy gets longer.
+        y_cursor = max(block_top_min, block_bottom - block_height)
+
+        # Badge pill, left aligned with the copy below it
+        badge_text = single_spec["badge_text"]
+        badge_font = get_system_font(single_spec["badge_font"], bold=True)
+        if hasattr(badge_font, "getbbox"):
+            bbox = badge_font.getbbox(badge_text)
+            badge_text_w, badge_text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        else:
+            badge_text_w, badge_text_h = len(badge_text) * 11, single_spec["badge_font"]
+        draw.rounded_rectangle([margin, y_cursor, margin + badge_text_w + 60, y_cursor + badge_h],
+                               radius=15, fill=key_color)
+        draw.text((margin + 30, y_cursor + (badge_h - badge_text_h) // 2 - 2), badge_text,
+                  fill=(255, 255, 255, 255), font=badge_font)
+        y_cursor += badge_h + single_spec["badge_gap"]
+
+        for line in title_lines:
+            draw_text_safe(draw, (margin + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font)
+            draw_text_safe(draw, (margin, y_cursor), line, fill=(255, 255, 255, 255), font=title_font)
+            y_cursor += title_line
+
+        if body_lines:
+            y_cursor += single_spec["title_body_gap"]
+            for text, line_font, line_color in body_lines:
+                draw_text_safe(draw, (margin + 2, y_cursor + 2), text, fill=(10, 10, 15, 170), font=line_font)
+                draw_text_safe(draw, (margin, y_cursor), text, fill=line_color, font=line_font)
+                y_cursor += body_line
+
+        # No next card to tease, so the card signs off with the brand name.
+        sign_font = get_system_font(single_spec["sign_font"])
+        draw.text((margin, H - single_spec["sign_from_bottom"]), single_spec["sign_text"],
+                  fill=key_color, font=sign_font)
+
     else:
         # Define layout dimensions for content/CTA cards
         card_x0, card_y0, card_x1, card_y1 = card_spec["box"]
@@ -949,6 +1160,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             main_text = slide.get("main_text", "")
             main_text, _ = strip_highlight_markers(main_text)
             main_text = remove_emojis(main_text)
+            main_text = break_after_commas(main_text)
             render_lines = [(line, content_font_bold, key_color)
                             for line in wrap_text(main_text, content_font_bold, card_spec["wrap"])]
         else:
@@ -960,6 +1172,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             main_text = slide.get("main_text", "")
             main_text = remove_emojis(main_text)
             main_text = format_korean_line_breaks(main_text)
+            main_text = break_after_commas(main_text)
 
             # Visual hierarchy for a clean, premium look:
             #  - Header line (e.g. "1. 소제목")  -> bold, near-white

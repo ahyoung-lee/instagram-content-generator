@@ -244,6 +244,22 @@ body {
     transform: translateY(1px);
 }
 
+/* Second generate action: the one-card post. Outlined so it reads as the
+   alternative to Generate rather than competing with it. */
+.btn-one {
+    background: transparent;
+    color: var(--key-color);
+    border: 2px solid var(--key-color);
+    padding: 0 26px;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+.btn-one:hover {
+    background: var(--key-color);
+    color: #fff;
+}
+
 /* Divider */
 .divider {
     border: 0;
@@ -302,6 +318,20 @@ body {
     grid-template-columns: repeat(4, 1fr);
     gap: 15px;
     margin-bottom: 30px;
+}
+
+/* A one-card post gets one bigger preview instead of a lone card stranded in a
+   4-wide grid, and keeps its photo button visible (there is no hover on touch). */
+.slides-grid.single-card {
+    grid-template-columns: minmax(0, 380px);
+    justify-content: center;
+}
+
+.slides-grid.single-card .slide-insert-btn {
+    opacity: 1;
+    bottom: 12px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
 }
 
 .slide-preview-wrapper {
@@ -514,6 +544,25 @@ body {
 .btn-youtube:hover {
     background: #b91c1c;
     box-shadow: 0 12px 30px rgba(220, 38, 38, 0.45);
+}
+
+/* "쇼츠 생성" — distinct blue accent, only shown for a one-card post */
+.btn-shorts {
+    background: #2563eb;
+    box-shadow: 0 8px 25px rgba(37, 99, 235, 0.3);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-shorts:hover {
+    background: #1d4ed8;
+    box-shadow: 0 12px 30px rgba(37, 99, 235, 0.45);
+}
+
+.btn-shorts.hidden {
+    display: none;
 }
 
 /* "영상 저장" — neutral dark grey, appears once the video is ready */
