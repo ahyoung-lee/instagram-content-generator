@@ -987,6 +987,52 @@ body {
     cursor: pointer;
 }
 
+/* Accent Color Picker */
+.theme-picker-container {
+    margin-bottom: 30px;
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+.theme-picker-container h4 {
+    font-size: 1.1rem;
+    color: #fff;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+.theme-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.theme-swatch {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    padding: 0;
+    cursor: pointer;
+    outline: none;
+    transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.theme-swatch:hover {
+    transform: scale(1.12);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+.theme-swatch:focus-visible {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+/* The color the cards are currently drawn in */
+.theme-swatch.active {
+    border-color: #fff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+    transform: scale(1.12);
+}
+
 /* Title Edit Section */
 .title-edit-container {
     margin-bottom: 30px;
@@ -1022,6 +1068,37 @@ body {
     border-color: var(--key-color);
     box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.25);
     background: rgba(255, 255, 255, 0.05);
+}
+
+/* The three lines drawn under the cover title */
+.cover-sub-input {
+    width: 100%;
+    margin-top: 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 14px 20px;
+    color: #f3f4f6;
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.cover-sub-input:focus {
+    border-color: var(--key-color);
+    box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.25);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* The button applies the title and the sub-copy in one re-render, so it sits
+   under both fields rather than beside either one. */
+.title-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
 }
 
 @media (max-width: 768px) {

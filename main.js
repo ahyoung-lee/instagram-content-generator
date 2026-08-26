@@ -5,6 +5,8 @@ let currentPostData = {
     date_str: '',
     zip_url: '',
     title: '',
+    subtitle: '',      // up to 3 lines drawn under the cover title
+    theme: '',         // accent color: rolled at random, then user-selectable
     mode: 'carousel'   // 'carousel' = multi-card deck, 'single' = one-card post
 };
 
@@ -154,7 +156,9 @@ const slidesGrid = document.getElementById('slides-grid');
 const captionText = document.getElementById('caption-text');
 const copyCaptionBtn = document.getElementById('copy-caption-btn');
 const titleEditInput = document.getElementById('title-edit-input');
+const coverSubInput = document.getElementById('cover-sub-input');
 const updateTitleBtn = document.getElementById('update-title-btn');
+const themeSwatches = document.getElementById('theme-swatches');
 const saveBtn = document.getElementById('save-btn');
 const previewHeading = document.getElementById('preview-heading');
 const insertHint = document.getElementById('insert-hint');
@@ -230,6 +234,126 @@ function resetReelButton() {
             btn.href = '#';
         }
     });
+}
+
+// --- Cover sub-copy (the three lines under the title) ---
+// The box holds three lines, and the renderer honours the same cap, so trim
+// anything typed or pasted beyond that: what you see is what the card gets.
+const COVER_SUB_MAX_LINES = 3;
+
+function clampCoverSub(value) {
+    return (value || '').split('\n').slice(0, COVER_SUB_MAX_LINES).join('\n');
+}
+
+if (coverSubInput) {
+    coverSubInput.addEventListener('input', () => {
+        const clamped = clampCoverSub(coverSubInput.value);
+        if (clamped !== coverSubInput.value) coverSubInput.value = clamped;
+    });
+    // Enter on the last allowed line would only add a line the card drops.
+    coverSubInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && coverSubInput.value.split('\n').length >= COVER_SUB_MAX_LINES) {
+            e.preventDefault();
+        }
+    });
+}
+
+// --- Accent color picker ---
+// The accent color is rolled at random each time a post is generated. These
+// chips let the user pick one instead: the cards are redrawn from the stored
+// plan and background, so switching color costs no API call.
+
+// Used only when /api/themes is unreachable (e.g. an older server still
+// deployed). Keep in sync with THEMES in src/script_vision.py.
+const FALLBACK_THEMES = [
+    { name: 'orange', hex: '#ff6600' },
+    { name: 'blue',   hex: '#0a84ff' },
+    { name: 'green',  hex: '#22c55e' },
+    { name: 'purple', hex: '#9561f6' },
+    { name: 'pink',   hex: '#f43f5e' },
+    { name: 'teal',   hex: '#14b8a6' },
+    { name: 'yellow', hex: '#facc15' },
+    { name: 'red',    hex: '#ff3b30' }
+];
+
+const THEME_LABELS = {
+    orange: '오렌지', blue: '블루', green: '그린', purple: '퍼플',
+    pink: '핑크', teal: '틸', yellow: '옐로우', red: '레드'
+};
+
+let availableThemes = null;   // fetched once, then reused
+
+async function loadThemes() {
+    if (availableThemes) return availableThemes;
+    try {
+        // No access key needed: this reads nothing and costs nothing.
+        const response = await fetch('/api/themes');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && Array.isArray(data.themes) && data.themes.length) {
+                availableThemes = data.themes;
+                return availableThemes;
+            }
+        }
+    } catch (error) {
+        console.warn('색상 목록을 불러오지 못해 기본 목록을 사용합니다.', error);
+    }
+    availableThemes = FALLBACK_THEMES;
+    return availableThemes;
+}
+
+async function renderThemePicker() {
+    if (!themeSwatches) return;
+    const themes = await loadThemes();
+    themeSwatches.innerHTML = '';
+    themes.forEach(({ name, hex }) => {
+        const label = THEME_LABELS[name] || name;
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'theme-swatch';
+        chip.style.background = hex;
+        chip.title = label;
+        chip.setAttribute('aria-label', label + ' 색상으로 변경');
+        chip.setAttribute('aria-pressed', String(name === currentPostData.theme));
+        chip.classList.toggle('active', name === currentPostData.theme);
+        chip.addEventListener('click', () => applyTheme(name));
+        themeSwatches.appendChild(chip);
+    });
+}
+
+async function applyTheme(theme) {
+    if (!currentPostData.date_str) {
+        alert('먼저 콘텐츠를 생성해 주세요.');
+        return;
+    }
+    if (theme === currentPostData.theme) return;   // already this color
+
+    loadingOverlay.classList.remove('hidden');
+    try {
+        const response = await apiFetch('/api/update_theme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_str: currentPostData.date_str, theme })
+        });
+        if (!response.ok) {
+            let msg = `서버 에러 (상태 코드: ${response.status})`;
+            try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+            throw new Error(msg);
+        }
+        const data = await response.json();
+        if (data.success) {
+            currentPostData.theme = data.theme || theme;
+            renderThemePicker();
+            renderSlidesPreview(data.image_urls, data.photo_slides);
+            // The card artwork changed -> any previously built video is now stale.
+            resetReelButton();
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`색상 변경 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
 }
 
 // --- Attach / remove a user photo on a card ---
@@ -564,7 +688,11 @@ async function runGenerate(mode) {
             currentPostData.zip_url = data.zip_url;
             currentPostData.title = data.title;
             currentPostData.mode = data.mode || 'carousel';
+            // The accent color the backend rolled for this post, so the picker
+            // can show which chip is currently in use.
+            currentPostData.theme = (data.plan && data.plan.theme) || '';
             applyModeUI(currentPostData.mode);
+            renderThemePicker();
 
             // Populate UI Elements
             dateBadge.textContent = data.date_str.split('/')[0];
@@ -574,6 +702,13 @@ async function runGenerate(mode) {
             
             // Set cover title input
             titleEditInput.value = data.title;
+
+            // The cover sub-copy: empty on a carousel (nothing is drawn under
+            // the title until the user types something), pre-filled on a
+            // one-card post whose body text the AI already wrote.
+            const coverSlide = (data.plan && data.plan.slides && data.plan.slides[0]) || {};
+            currentPostData.subtitle = clampCoverSub(coverSlide.sub_text || '');
+            if (coverSubInput) coverSubInput.value = currentPostData.subtitle;
 
             // Render Slide Images Preview
             renderSlidesPreview(data.image_urls, data.photo_slides || []);
@@ -625,8 +760,10 @@ copyCaptionBtn.addEventListener('click', () => {
 });
 
 // 3. Update Slide Title
+// Title and sub-copy travel together: one round trip redraws both.
 updateTitleBtn.addEventListener('click', async () => {
     const newTitle = titleEditInput.value.trim();
+    const newSubtitle = coverSubInput ? clampCoverSub(coverSubInput.value) : '';
     if (!newTitle) {
         alert('첫 번째 이미지에 적용할 제목을 입력해 주세요.');
         return;
@@ -647,7 +784,8 @@ updateTitleBtn.addEventListener('click', async () => {
             },
             body: JSON.stringify({
                 date_str: currentPostData.date_str,
-                title: newTitle
+                title: newTitle,
+                subtitle: newSubtitle
             })
         });
 
@@ -660,6 +798,7 @@ updateTitleBtn.addEventListener('click', async () => {
         if (data.success) {
             currentPostData.zip_url = data.zip_url;
             currentPostData.title = newTitle;
+            currentPostData.subtitle = newSubtitle;
             currentPostData.image_paths = data.absolute_paths;
 
             // Render Slide Images Preview
@@ -668,7 +807,7 @@ updateTitleBtn.addEventListener('click', async () => {
             // Images changed -> any previously built reel is now stale
             resetReelButton();
 
-            alert('표지 제목이 성공적으로 변경되었습니다!');
+            alert('표지 문구가 성공적으로 변경되었습니다!');
         } else {
             alert(`제목 변경 실패: ${data.error || '알 수 없는 오류'}`);
         }

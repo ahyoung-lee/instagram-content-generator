@@ -11,7 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;400;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260812">
+    <link rel="stylesheet" href="style.css?v=20260825">
 </head>
 
 <body>
@@ -65,10 +65,22 @@
                     </div>
                 </div>
 
+                <div class="theme-picker-container">
+                    <h4>카드 강조 색상</h4>
+                    <p class="insert-hint">강조 색상은 생성할 때마다 <b>랜덤</b>으로 정해집니다. 아래에서 원하는 색을 고르면 카드가 그 색으로 다시 그려져요. (글과 배경은 그대로라 추가 비용이 들지 않습니다.)</p>
+                    <div id="theme-swatches" class="theme-swatches"></div>
+                </div>
+
                 <div class="title-edit-container">
-                    <h4>이미지 제목 수정</h4>
+                    <h4>표지 제목 · 내용 수정</h4>
                     <div class="title-edit-bar">
                         <input type="text" id="title-edit-input" placeholder="첫 번째 슬라이드의 제목을 입력하세요." aria-label="제목 수정">
+                    </div>
+                    <textarea id="cover-sub-input" class="cover-sub-input" rows="3"
+                        placeholder="제목 바로 아래에 들어갈 내용을 최대 3줄까지 입력하세요. (비워두면 제목만 들어갑니다)"
+                        aria-label="표지 내용 수정"></textarea>
+                    <p class="insert-hint">한 줄을 <b>**별표 두 개**</b>로 감싸면 그 줄만 강조 색상으로 그려집니다. <b>변경하기</b>를 누르면 제목과 내용이 함께 반영돼요.</p>
+                    <div class="title-edit-actions">
                         <button id="update-title-btn" class="btn-secondary">변경하기</button>
                     </div>
                 </div>
@@ -141,7 +153,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=20260812"></script>
+    <script src="main.js?v=20260825"></script>
 </body>
 
 </html>

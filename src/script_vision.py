@@ -36,6 +36,12 @@ CANVASES = {
             "title_top": 730,
             "title_wrap": 920,
             "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
+            # Optional sub-copy typed under the title from the dashboard
+            # (up to COVER_SUB_MAX_LINES lines). Absent on a fresh post.
+            "sub_font": 30,
+            "sub_line": 46,
+            "sub_gap": 30,
+            "sub_wrap": 900,
             "teaser_from_bottom": 143,
             "teaser_clear": 150,
             "teaser_font": 26,
@@ -99,6 +105,10 @@ CANVASES = {
             "title_top": 560,
             "title_wrap": 1250,
             "title_steps": ((96, 128), (86, 116), (76, 102), (66, 90)),
+            "sub_font": 34,
+            "sub_line": 52,
+            "sub_gap": 32,
+            "sub_wrap": 1230,
             "teaser_from_bottom": 118,
             "teaser_clear": 130,
             "teaser_font": 30,
@@ -160,6 +170,10 @@ CANVASES = {
             "title_top": 1080,
             "title_wrap": 920,
             "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
+            "sub_font": 27,
+            "sub_line": 42,
+            "sub_gap": 26,
+            "sub_wrap": 900,
             "teaser_from_bottom": 490,
             "teaser_clear": 500,
             "teaser_font": 26,
@@ -526,6 +540,25 @@ def strip_highlight_markers(text: str) -> tuple:
     """
     has_highlight = "**" in text
     return text.replace("**", ""), has_highlight
+
+
+# How many typed lines the cover sub-copy accepts. The dashboard offers a
+# three-line box under the title field, and the renderer honours the same cap.
+COVER_SUB_MAX_LINES = 3
+
+
+def cover_sub_lines(text: Optional[str]) -> list:
+    """
+    Cleans the cover sub-copy into at most COVER_SUB_MAX_LINES typed lines.
+
+    Blank lines are dropped so a stray newline from the dashboard textarea does
+    not eat one of the three slots. Each surviving line keeps its own '**...**'
+    markers, which the renderer paints in the theme's key color.
+    """
+    if not text:
+        return []
+    lines = [line.strip() for line in remove_emojis(str(text)).split("\n")]
+    return [line for line in lines if line][:COVER_SUB_MAX_LINES]
 
 
 def _text_width(font, text: str) -> int:
@@ -1006,9 +1039,31 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         title_text = remove_emojis(title_text)
         title_text = break_after_commas(title_text)
 
+        # Sub-copy under the title: up to three lines the user types in the
+        # dashboard. A freshly generated post has none, so a cover without
+        # sub-copy is drawn exactly as before.
+        sub_font = get_system_font(cover_spec["sub_font"])
+        sub_font_bold = get_system_font(cover_spec["sub_font"], bold=True)
+        sub_line_h = cover_spec["sub_line"]
+        sub_gap = cover_spec["sub_gap"]
+
+        # Each typed line carries its own '**highlight**' state and may still
+        # wrap if it runs wider than the card.
+        sub_lines = []
+        for logical in cover_sub_lines(slide.get("sub_text")):
+            clean, has_highlight = strip_highlight_markers(logical)
+            line_font = sub_font_bold if has_highlight else sub_font
+            line_color = key_color if has_highlight else (226, 228, 234, 255)
+            for piece in wrap_text(clean, line_font, cover_spec["sub_wrap"]):
+                sub_lines.append((piece, line_font, line_color))
+
+        def sub_block_height(count: int) -> int:
+            return sub_gap + count * sub_line_h if count else 0
+
         # Fit the hook: start at a large size and step down if it wraps to many
         # lines, so the title never overflows into the teaser instead of being
-        # hard-truncated with an ellipsis.
+        # hard-truncated with an ellipsis. The sub-copy shares that budget, so a
+        # cover carrying one gets a slightly smaller title.
         y_start = cover_spec["title_top"]
         teaser_top = H - cover_spec["teaser_clear"]  # keep clear of the bottom teaser text
         title_font = None
@@ -1016,8 +1071,13 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         for font_size, line_height in cover_spec["title_steps"]:
             title_font = get_system_font(font_size, bold=True)
             lines = wrap_text(title_text, title_font, cover_spec["title_wrap"])
-            if y_start + len(lines) * line_height <= teaser_top:
+            if y_start + len(lines) * line_height + sub_block_height(len(sub_lines)) <= teaser_top:
                 break
+
+        # Both blocks long even at the smallest step: drop sub-copy lines from
+        # the end rather than letting the text run over the teaser.
+        while sub_lines and y_start + len(lines) * line_height + sub_block_height(len(sub_lines)) > teaser_top:
+            sub_lines.pop()
 
         y_cursor = y_start
         for line in lines:
@@ -1026,6 +1086,13 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
             draw_text_safe(draw, (margin, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
             y_cursor += line_height
+
+        if sub_lines:
+            y_cursor += sub_gap
+            for text, line_font, line_color in sub_lines:
+                draw_text_safe(draw, (margin + 2, y_cursor + 2), text, fill=(10, 10, 15, 190), font=line_font)
+                draw_text_safe(draw, (margin, y_cursor), text, fill=line_color, font=line_font)
+                y_cursor += sub_line_h
 
         # Draw teaser text at the bottom. The logo moved to the top-left corner,
         # so the teaser reclaims the full-width left margin used by the title.

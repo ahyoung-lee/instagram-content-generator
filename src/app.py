@@ -54,6 +54,14 @@ class PublishRequest(BaseModel):
 class UpdateTitleRequest(BaseModel):
     date_str: str
     title: str
+    # Up to three lines drawn under the cover title. Sent together with the
+    # title so one re-render applies both fields. None = leave the stored
+    # sub-copy untouched; "" = clear it.
+    subtitle: Optional[str] = None
+
+class UpdateThemeRequest(BaseModel):
+    date_str: str
+    theme: str
 
 class PrepareDownloadRequest(BaseModel):
     date_str: str
@@ -552,7 +560,18 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
         plan_data["title"] = payload.title
         # Also update the title in the first slide if it is a cover slide
         if plan_data.get("plan", {}).get("slides"):
-            plan_data["plan"]["slides"][0]["main_text"] = payload.title
+            cover = plan_data["plan"]["slides"][0]
+            cover["main_text"] = payload.title
+            # The sub-copy under the title rides along with the title edit, so
+            # one re-render applies both. Clearing the dashboard box removes the
+            # sub-copy from the card entirely.
+            if payload.subtitle is not None:
+                from src.script_vision import cover_sub_lines
+                sub_text = "\n".join(cover_sub_lines(payload.subtitle))
+                if sub_text:
+                    cover["sub_text"] = sub_text
+                else:
+                    cover.pop("sub_text", None)
             
         # Write updated plan back to cache
         with open(plan_file, "w", encoding="utf-8") as f:
@@ -561,10 +580,14 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
         # Re-render Pillow images
         # Since background_master.png exists, it will reuse it (reuse_background=True)
         generated_files = generate_carousel_images(
-            plan_data["plan"], 
-            post_dir, 
-            reuse_background=True, 
-            article_title=payload.title
+            plan_data["plan"],
+            post_dir,
+            reuse_background=True,
+            article_title=payload.title,
+            # Editing copy must never buy a background: a post whose master went
+            # missing falls back to the theme gradient instead of a paid image
+            # call the user never asked for.
+            allow_paid_background=False,
         )
         
         # Re-rendering rewrites the slide_XX files in place, so the stored
@@ -588,6 +611,59 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
     except Exception as e:
         import traceback
         print(f"Update title error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/themes")
+def api_themes():
+    """
+    The accent colors a post can be repainted in, as "#rrggbb" swatches.
+
+    Served from THEMES so the dashboard's color chips can never drift from what
+    the renderer actually draws. No key required: it reads nothing and costs
+    nothing.
+    """
+    from src.script_vision import THEMES, DEFAULT_THEME
+    return {
+        "success": True,
+        "default": DEFAULT_THEME,
+        "themes": [
+            {"name": name, "hex": "#%02x%02x%02x" % palette["key"][:3]}
+            for name, palette in THEMES.items()
+        ],
+    }
+
+@app.post("/api/update_theme")
+def api_update_theme(payload: UpdateThemeRequest, x_access_key: Optional[str] = Header(default=None)):
+    """
+    Repaints a post in a different accent color.
+
+    The theme is normally rolled at random when the post is generated; this lets
+    the user pick one instead. Only the accent color changes: the card copy and
+    the background master are reused, so no paid API call is made.
+    """
+    verify_access(x_access_key)
+    try:
+        from src.script_vision import THEMES
+        theme = (payload.theme or "").strip().lower()
+        if theme not in THEMES:
+            raise HTTPException(status_code=400, detail=f"알 수 없는 색상 테마입니다: {payload.theme}")
+
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        data = _load_plan_data(post_dir)
+        data.setdefault("plan", {})["theme"] = theme
+        _save_plan_data(post_dir, data)
+
+        result = _rerender_response(payload.date_str, post_dir, data)
+        result["theme"] = theme
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Update theme error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/prepare_download")
