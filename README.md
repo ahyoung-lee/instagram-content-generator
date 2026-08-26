@@ -51,7 +51,8 @@ Since this project requires a Python backend to run AI generation and image rend
    - `OPENAI_API_KEY`
    - `INSTAGRAM_BUSINESS_ACCOUNT_ID`
    - `META_ACCESS_TOKEN`
-   - `PUBLIC_BASE_URL`: (Set this to the public HTTPS URL provided by Render, e.g. `https://instagram-content-generator.onrender.com`)
+   - `PUBLIC_BASE_URL`: the public HTTPS URL Render gives the service. This project's live deployment is `https://instagram-content-generator-6tbz.onrender.com` — note the suffix Render appends, which makes it different from the repository name.
+   - `ACCESS_KEY`: presenter-only password. When set, the endpoints that spend API credit reject requests without a matching key; leave it unset locally to keep development frictionless.
 6. Click **Deploy Web Service**. 
 
 *Every time you push changes to GitHub, Render will automatically pull the updates and redeploy the live website!*
