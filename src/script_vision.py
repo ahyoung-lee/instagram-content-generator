@@ -153,36 +153,38 @@ CANVASES = {
     "story": {
         # 9:16 for a Shorts/Reels cut. Drawn at 1080x1920 and scaled down by the
         # video step, so the card fills the phone screen with nothing cropped and
-        # no blurred bands. The bottom 380px (~20% of the frame) is left empty:
+        # no blurred bands. The bottom 480px (25% of the frame) is left empty:
         # that band is where the Shorts player stacks its title, handle and
-        # buttons, so nothing of the card may sit there.
+        # buttons, so nothing of the card may sit there. The logo starts 120px
+        # down for the same reason: YouTube draws its own top bar over the first
+        # ~100px of the frame.
         "size": (1080, 1920),
         "margin": 80,
-        "watermark_pos": (50, 50),
+        "watermark_pos": (50, 120),
         "watermark_width": 160,
-        "bar_from_bottom": (380, 376),
-        "page_from_bottom": 436,
+        "bar_from_bottom": (480, 476),
+        "page_from_bottom": 536,
         "page_font": 26,
         "cover": {
-            "grad_start": 810,
-            "badge_box": (80, 1000, 390, 1045),
+            "grad_start": 710,
+            "badge_box": (80, 900, 390, 945),
             "badge_font": 22,
-            "title_top": 1080,
+            "title_top": 980,
             "title_wrap": 920,
             "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
             "sub_font": 27,
             "sub_line": 42,
             "sub_gap": 26,
             "sub_wrap": 900,
-            "teaser_from_bottom": 490,
-            "teaser_clear": 500,
+            "teaser_from_bottom": 590,
+            "teaser_clear": 600,
             "teaser_font": 26,
             "teaser_text": "옆으로 넘겨서 보기 ▶",
             "teaser_text_video": "always good",
         },
         "single": {
-            "grad_start": 430,
-            "grad_full": 850,
+            "grad_start": 330,
+            "grad_full": 750,
             "grad_alpha": 232,
             "badge_text": "TODAY'S ISSUE",
             "badge_font": 22,
@@ -192,17 +194,17 @@ CANVASES = {
             "body_wrap": 880,
             "title_body_gap": 38,
             "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
-            "block_bottom": 530,
-            "block_top_min": 600,
-            "sign_from_bottom": 470,
+            "block_bottom": 630,
+            "block_top_min": 500,
+            "sign_from_bottom": 570,
             "sign_font": 26,
             "sign_text": "always good",
         },
         "card": {
-            "box": (80, 390, 1000, 1390),
+            "box": (80, 290, 1000, 1290),
             "wrap": 820,
-            "badge_top": 430,
-            "text_top": 510,
+            "badge_top": 330,
+            "text_top": 410,
             "body": 43, "line": 70,
             "body_photo": 34, "line_photo": 54,
             "cta": 46, "cta_line": 80,
