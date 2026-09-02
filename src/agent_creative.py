@@ -17,6 +17,8 @@ MAX_SLIDES = 10
 # High-quality Korean copywriter persona shared across all model calls.
 SYSTEM_PROMPT = (
     "너는 인스타그램 트래픽을 지배하는 천재 카피라이터이자 깊이 있는 정보 분석가다. "
+    "기사 제목은 절대 그대로 쓰지 않는다. 원문 제목의 주제와 사실관계는 지킨 채 표현만 다듬어, "
+    "피드에서 손이 멈추는 한 문장으로 항상 새로 써낸다. "
     "기사를 꼼꼼히 정독해 핵심 요점을 하나도 빠짐없이 뽑아내고, 각 요점을 "
     "구체적인 수치·사실·근거·실전 팁 중심으로 밀도 있게 정리한다. "
     "2번째 카드뉴스(content)부터는 각 슬라이드가 '하나의 핵심 요점'만 깊이 있게 다루도록 한다. "
@@ -32,6 +34,8 @@ SYSTEM_PROMPT = (
 SYSTEM_PROMPT_SINGLE = (
     "너는 인스타그램 트래픽을 지배하는 천재 카피라이터다. "
     "지금 만드는 것은 넘겨 보는 카드뉴스가 아니라 '단 한 장'짜리 카드뉴스다. "
+    "기사 제목은 절대 그대로 쓰지 않고, 원문의 주제와 사실관계를 지킨 채 표현만 다듬어 "
+    "이목을 끄는 한 문장으로 바꾼다. "
     "독자가 스크롤을 멈추고 3초 안에 핵심을 다 파악할 수 있도록, 기사에서 가장 중요한 사실만 "
     "골라 짧고 강한 문장으로 압축한다. 설명을 길게 늘어놓지 않고, 구체적인 수치·사실 중심으로 쓴다. "
     "이모지나 이모티콘은 절대 사용하지 않고, 근거 없는 추측이나 기사에 없는 내용은 절대 쓰지 않는다."
@@ -65,12 +69,17 @@ def _normalize_slides(plan: dict) -> dict:
     """Drops the retired closing card, caps the deck at MAX_SLIDES and renumbers.
 
     The carousel now ends on its last content card, so any 'cta' slide the model
-    still returns is removed here rather than rendered.
+    still returns is removed here rather than rendered. The cover also always
+    carries the polished headline, so the title drawn on the card is the one the
+    dashboard shows and the caption follows on from.
     """
     slides = [s for s in plan.get("slides", []) if s.get("type") != "cta"]
     slides = slides[:MAX_SLIDES]
     for page, slide in enumerate(slides, start=1):
         slide["page"] = page
+    headline = (plan.get("hooking_title") or "").strip()
+    if slides and headline and slides[0].get("type") == "cover":
+        slides[0]["main_text"] = headline
     plan["slides"] = slides
     plan["total_pages"] = len(slides)
     return plan
@@ -123,11 +132,14 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
 [뉴스 내용]: {article_content}
 
 [작성 요구사항]:
-1. (매우 중요) `hooking_title`은 기사 제목을 그대로 쓰지 말고, 클릭률이 훨씬 높아지도록 새로 써줘. 이 문장이 원래 기사 제목을 대체하는 게시물의 공식 제목으로 쓰이고, 캡션 도입부도 여기서 이어져.
-   - 원문 제목의 사실관계는 그대로 지키되, 표현만 인스타그램 피드에서 손이 멈추는 문장으로 바꿔줘. 기사에 없는 내용을 지어내거나 과장해서 낚시성 제목을 만들면 안 돼.
-   - 다음 중 하나 이상을 활용해: 구체적인 숫자(금액·기간·비율·개수), 독자에게 돌아오는 이득이나 손해, 의외성 있는 사실, "왜 / 어떻게"로 이어지는 궁금증.
+1. (매우 중요) `hooking_title`은 위에 준 [뉴스 제목]을 **항상** 더 이목을 끄는 한 문장으로 다듬은 결과여야 해. 원문 제목을 그대로 가져다 쓰는 건 금지야. 이 문장이 원래 기사 제목을 대체하는 게시물의 공식 제목이자 표지 카드에 크게 박히는 문장이고, 캡션 도입부도 여기서 이어져.
+   - '다듬는다'는 건 원문 제목이 다루는 주제·대상·사실관계는 그대로 두고, 표현만 인스타그램 피드에서 손이 멈추는 문장으로 바꾸는 걸 말해. 기사와 다른 주제를 새로 지어내거나, 기사에 없는 내용으로 부풀린 낚시성 제목을 만들면 절대 안 돼.
+   - 원문 제목에서 가장 힘 있는 알맹이(대상·숫자·달라지는 점)는 남기고, 딱딱한 보도체 표현과 기관명 나열·군더더기 수식어는 덜어내.
+   - 다음 중 하나 이상은 반드시 살려줘: 구체적인 숫자(금액·기간·비율·개수), 독자에게 돌아오는 이득이나 손해, 의외성 있는 사실, "왜 / 어떻게"로 이어지는 궁금증.
    - 20자 내외의 짧고 강한 문장으로, 신문 기사체("~해", "~밝혀", "~한다")가 아니라 독자에게 말 거는 구어체로 써줘.
+   - 다 쓰고 나서 원문 제목과 나란히 놓고 확인해. 표현이 눈에 띄게 달라지지 않았거나 단어 몇 개만 바꾼 수준이면 다시 써.
    - 예시: "정부, 청년 월세 지원 확대 시행" -> "월세 20만원, 몰라서 못 받는 청년들"
+   - 예시: "한국은행, 기준금리 0.25%p 인하 결정" -> "금리 내렸는데, 내 대출이자는 언제 줄까"
 2. 기사 내용을 아주 꼼꼼하고 깊이 있게 정독하여 독자에게 실질적으로 가치 있는 정보와 요점을 빠짐없이 파악해야 해. 요식 행위 수준의 단순 나열이 아니라, 핵심 구체적 수치(날짜·금액·비율·순위 등), 원인·배경, 근거, 그리고 독자가 바로 써먹을 수 있는 실전 팁을 밀도 있게 정리해줘. 각 요점은 '무엇이(핵심 사실)'에 더해 '왜 중요한지 / 어떤 영향이 있는지'까지 한 단계 더 깊이 짚어줘. 추측성 정보나 기사에 없는 내용을 지어내지 말고, 반드시 기사 근거에 기반해서 작성해. 특히, 기사 내에 나열된 핵심 키포인트나 세부 기능/방법의 개수를 명확히 세어보고(예: 기사 제목이나 본문에 6가지 방법이 있다면), 그 개수 그대로 내용 슬라이드를 구성하여 누락되는 부분이 단 하나도 없게 해야 해.
 3. 기사 본문의 풍부함과 요점 개수(N개)에 맞게 카드뉴스 총 매수를 **최대 10장(권장: 6장 ~ 10장)**까지 충분히 할애하여 중요 정보가 누락되지 않도록 설계해줘. 총 매수는 '표지 1장 + content 슬라이드'로 구성되므로 content 슬라이드는 최대 9개까지 만들 수 있어. 예컨대 6가지 핵심 항목이 있다면 표지를 제외한 내용('content' 타입) 슬라이드를 정확히 6개 생성해야 해. 기사에 담긴 요점이 충분히 많다면 6개 미만으로 줄이지 말고 최대치에 가깝게 채워줘.
 4. 2번째 카드뉴스 내용부터 중간 페이지들('content' 타입)의 `main_text`는 반드시 아래 구조로 작성해줘:
@@ -136,7 +148,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
    - (매우 중요) 설명이 길면 의미 단위(구/절)로 `\n`을 직접 넣어 한 줄이 대략 16자 이내가 되도록 2~4줄로 자연스럽게 끊어줘. 조사(을/를/이/가/은/는/와/과/의/로)나 접속사(그리고/하지만 등)로 줄을 끝내지 마. 한 문장이 어색하게 잘리지 않도록 읽기 흐름에 맞게 끊는 게 핵심이야.
    - (매우 중요) 각 content 슬라이드에서 독자가 꼭 기억해야 할 '가장 핵심적인 문장 딱 1개'를 골라, 그 문장 전체(제목 줄 제외)를 `**문장**` 형태로 감싸줘. 이렇게 감싼 문장은 이미지에서 키컬러로 강조 표시돼. 예: "구독자가 **3개월 만에 2배 늘었어요**". 강조는 슬라이드당 1개만, 소제목(제목 줄)에는 절대 쓰지 마.
    - (매우 중요) 이모지나 이모티콘은 절대 사용하지 마. 모든 슬라이드는 이모지 없이 오직 텍스트만으로 깔끔하게 작성해줘.
-5. 카드뉴스의 첫 페이지는 'cover' 타입이고, 나머지 페이지는 전부 'content' 타입이어야 해. (매우 중요) 마지막을 장식하는 마무리·공유 유도 카드('cta' 타입)는 더 이상 만들지 마. 마지막 페이지도 반드시 기사 내용을 담은 'content' 슬라이드로 끝나야 해.
+5. 카드뉴스의 첫 페이지는 'cover' 타입이고, 나머지 페이지는 전부 'content' 타입이어야 해. (매우 중요) 표지 슬라이드의 `main_text`에는 1번에서 다듬은 `hooking_title`을 **똑같은 문장 그대로** 넣어줘. 표지용 문구를 따로 새로 짓지 마 — 대시보드에 뜨는 제목과 표지 카드에 박히는 제목이 항상 같아야 해. (매우 중요) 마지막을 장식하는 마무리·공유 유도 카드('cta' 타입)는 더 이상 만들지 마. 마지막 페이지도 반드시 기사 내용을 담은 'content' 슬라이드로 끝나야 해.
 6. 동일한 기사 링크로 여러 번 요청될 수 있으니, 매번 텍스트 생성 시 이전 버전과 다른 깊이 있는 분석 각도나 새로운 유용한 디테일을 찾아 독창적이고 심도 있게 작성해줘.
 7. `final_caption`은 장황하게 늘어놓지 말고, 독자가 스크롤하며 3초 안에 핵심을 파악할 수 있도록 아래 구조로 밀도 있게 '핵심화'해서 작성해줘 (매우 중요):
    - (1) 도입 3줄: `hooking_title`(제목)과 바로 이어지는 내용을 정확히 3줄로 써줘. 제목이 던진 궁금증을 받아서 '무엇이 어떻게 됐는지'를 자연스러운 문장으로 풀어주는 도입부야. 각 줄은 20~35자 정도의 완결된 문장으로 쓰고, '·' 같은 목록 기호는 붙이지 마. 제목을 그대로 반복하지 말고 한 걸음 더 들어간 내용을 담아.
@@ -157,7 +169,7 @@ JSON 스키마:
   "hooking_title": "대제목 텍스트",
   "theme": "blue",
   "slides": [
-    {{"page": 1, "type": "cover", "main_text": "호기심 유발 표지 문구"}},
+    {{"page": 1, "type": "cover", "main_text": "hooking_title과 똑같은 대제목"}},
     {{"page": 2, "type": "content", "main_text": "1. 실시간 개인화\\n사용자 행동을 즉시 학습해\\n맞춤 콘텐츠를 추천합니다\\n**체류 시간이 40% 늘었어요**"}},
     {{"page": 3, "type": "content", "main_text": "2. 시각 지능\\n사진 한 장만 올려도\\n**핵심 정보를 자동으로 정리해줘요**"}},
     {{"page": 4, "type": "content", "main_text": "3. 글쓰기 도구\\n**초안 작성 시간을 절반으로 줄이고**\\n톤앤매너까지 맞춰줍니다"}},
@@ -185,8 +197,11 @@ JSON 스키마:
         print(f"Error generating content via OpenAI: {e}")
         # Customize fallback with article-specific basic info if API fails
         fallback_copy = fallback_response.copy()
-        fallback_copy["hooking_title"] = f"이슈 분석: {article_title[:20]}..."
-        fallback_copy["slides"][0]["main_text"] = f"화제의 이슈!\n{article_title[:15]}\n핵심 요약 정리"
+        # No model call succeeded, so reshape the headline locally rather than
+        # letting the raw one through as the post title.
+        fallback_headline = f"{article_title[:24]}, 왜 지금 화제일까"
+        fallback_copy["hooking_title"] = fallback_headline
+        fallback_copy["slides"][0]["main_text"] = fallback_headline
         fallback_copy["slides"][1]["main_text"] = f"기사 본문 내용 요약:\n{article_content[:50]}..."
         fallback_copy["slides"][2]["main_text"] = "트렌드 변화 속에서\n우리가 준비해야 할\n비즈니스 기회는 무엇일까요?"
         fallback_copy["final_caption"] = f"{article_title}\n\n· 지금 가장 주목받는 핵심 이슈 정리\n· 놓치면 안 되는 배경과 포인트\n\n#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석"
@@ -222,7 +237,7 @@ def _single_card_plan(headline: str, card_text: str, caption: str, image_prompt:
 
 def generate_single_card_plan(article_title: str, article_content: str) -> dict:
     """
-    Builds a one-card post from an article: a hooking headline plus a 3~4 line
+    Builds a one-card post from an article: a hooking headline plus a 3~5 line
     body block that has to carry the whole story on a single image, along with
     the feed caption and the background image prompt.
     """
@@ -265,13 +280,18 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
 [뉴스 내용]: {article_content}
 
 [작성 요구사항]:
-1. (매우 중요) `hooking_title`은 카드 한 장의 대제목으로 이미지에 크게 박히는 문장이야. 기사 제목을 그대로 쓰지 말고, 클릭률이 훨씬 높아지도록 새로 써줘.
-   - 원문 제목의 사실관계는 그대로 지키되, 표현만 인스타그램 피드에서 손이 멈추는 문장으로 바꿔줘. 기사에 없는 내용을 지어내거나 과장해서 낚시성 제목을 만들면 안 돼.
-   - 다음 중 하나 이상을 활용해: 구체적인 숫자(금액·기간·비율·개수), 독자에게 돌아오는 이득이나 손해, 의외성 있는 사실, "왜 / 어떻게"로 이어지는 궁금증.
+1. (매우 중요) `hooking_title`은 카드 한 장의 대제목으로 이미지에 크게 박히는 문장이야. 위에 준 [뉴스 제목]을 **항상** 더 이목을 끄는 한 문장으로 다듬어서 써줘. 원문 제목을 그대로 가져다 쓰는 건 금지야.
+   - '다듬는다'는 건 원문 제목이 다루는 주제·대상·사실관계는 그대로 두고, 표현만 인스타그램 피드에서 손이 멈추는 문장으로 바꾸는 걸 말해. 기사와 다른 주제를 새로 지어내거나, 기사에 없는 내용으로 부풀린 낚시성 제목을 만들면 절대 안 돼.
+   - 원문 제목에서 가장 힘 있는 알맹이(대상·숫자·달라지는 점)는 남기고, 딱딱한 보도체 표현과 기관명 나열·군더더기 수식어는 덜어내.
+   - 다음 중 하나 이상은 반드시 살려줘: 구체적인 숫자(금액·기간·비율·개수), 독자에게 돌아오는 이득이나 손해, 의외성 있는 사실, "왜 / 어떻게"로 이어지는 궁금증.
    - 20자 내외의 짧고 강한 문장으로, 신문 기사체("~해", "~밝혀", "~한다")가 아니라 독자에게 말 거는 구어체로 써줘.
+   - 다 쓰고 나서 원문 제목과 나란히 놓고 확인해. 표현이 눈에 띄게 달라지지 않았거나 단어 몇 개만 바꾼 수준이면 다시 써.
    - 예시: "정부, 청년 월세 지원 확대 시행" -> "월세 20만원, 몰라서 못 받는 청년들"
-2. `card_text`는 대제목 아래에 들어가는 본문 블록이야. 기사를 꼼꼼히 정독해서 독자가 꼭 알아야 할 핵심만 **정확히 3~4줄**로 압축해줘.
-   - 카드가 한 장뿐이라 뒤에 이어지는 슬라이드가 없어. 그러니 '무엇이 어떻게 됐는지'와 '그래서 독자에게 뭐가 달라지는지'가 이 3~4줄 안에 다 들어가야 해.
+   - 예시: "한국은행, 기준금리 0.25%p 인하 결정" -> "금리 내렸는데, 내 대출이자는 언제 줄까"
+2. `card_text`는 대제목 아래에 들어가는 본문 블록이야. 기사를 꼼꼼히 정독해서 독자가 꼭 알아야 할 핵심만 **3~5줄**로 압축해줘.
+   - 기본은 3~4줄이야. 다만 독자가 놓치면 안 되는 중요한 사실(수치·금액·조건·대상·일정 등)이 더 있으면 억지로 줄이지 말고 5줄까지 늘려 써도 돼. 5줄이 최대치이고, 그걸 넘기면 카드에 들어가지 않아.
+   - 반대로 줄 수를 채우려고 덜 중요한 내용이나 뻔한 문장을 끼워 넣지는 마. 4줄째, 5줄째는 정말 담을 핵심이 남아 있을 때만 쓰는 여유분이야.
+   - 카드가 한 장뿐이라 뒤에 이어지는 슬라이드가 없어. 그러니 '무엇이 어떻게 됐는지'와 '그래서 독자에게 뭐가 달라지는지'가 이 몇 줄 안에 다 들어가야 해.
    - 각 줄은 18자 내외의 완결된 구/절로 쓰고 `\\n`으로 구분해줘. 조사(을/를/이/가/은/는/와/과/의/로)나 접속사로 줄을 끝내지 마.
    - 구체적인 수치·날짜·금액·비율 같은 사실을 반드시 포함하고, 기사에 없는 내용은 절대 지어내지 마.
    - '·', '-' 같은 목록 기호는 붙이지 말고, 대제목(`hooking_title`) 문장을 그대로 반복하지 마.
@@ -291,7 +311,7 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
 JSON 스키마:
 {{
   "hooking_title": "카드에 크게 들어갈 대제목",
-  "card_text": "첫째 줄 핵심\\n**가장 중요한 한 줄**\\n셋째 줄 핵심",
+  "card_text": "첫째 줄 핵심\\n둘째 줄 핵심\\n**가장 중요한 한 줄**\\n넷째 줄 핵심",
   "theme": "blue",
   "final_caption": "제목과 이어지는 도입 첫째 줄\\n둘째 줄\\n셋째 줄\\n\\n· 핵심 요점 1\\n· 핵심 요점 2\\n\\n#해시태그1 #해시태그2 #해시태그3 #해시태그4",
   "image_prompt": "A detailed English prompt for a photorealistic photograph based on the selected keywords"
@@ -317,7 +337,7 @@ JSON 스키마:
         print(f"Error generating single card via OpenAI: {e}")
         # Fall back to article-specific basic copy if the API fails
         return _single_card_plan(
-            headline=f"이슈 정리: {article_title[:20]}",
+            headline=f"{article_title[:24]}, 왜 지금 화제일까",
             card_text=f"{article_content[:40]}\n**지금 가장 주목받는 핵심 이슈**\n놓치면 안 되는 배경과 포인트",
             caption=(
                 f"{article_title}\n\n"

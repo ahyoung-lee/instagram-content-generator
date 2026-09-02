@@ -236,13 +236,20 @@ function resetReelButton() {
     });
 }
 
-// --- Cover sub-copy (the three lines under the title) ---
-// The box holds three lines, and the renderer honours the same cap, so trim
-// anything typed or pasted beyond that: what you see is what the card gets.
+// --- Sub-copy under the title ---
+// On a carousel this box holds the three cover lines. On a one-card post it
+// holds that card's body block, which stretches to five lines when the article
+// has more the reader must not miss. The renderer honours the same caps, so trim
+// anything typed or pasted beyond them: what you see is what the card gets.
 const COVER_SUB_MAX_LINES = 3;
+const SINGLE_BODY_MAX_LINES = 5;
+
+function subMaxLines() {
+    return currentPostData.mode === 'single' ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
+}
 
 function clampCoverSub(value) {
-    return (value || '').split('\n').slice(0, COVER_SUB_MAX_LINES).join('\n');
+    return (value || '').split('\n').slice(0, subMaxLines()).join('\n');
 }
 
 if (coverSubInput) {
@@ -252,7 +259,7 @@ if (coverSubInput) {
     });
     // Enter on the last allowed line would only add a line the card drops.
     coverSubInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && coverSubInput.value.split('\n').length >= COVER_SUB_MAX_LINES) {
+        if (e.key === 'Enter' && coverSubInput.value.split('\n').length >= subMaxLines()) {
             e.preventDefault();
         }
     });
@@ -626,11 +633,13 @@ function renderSlidesPreview(imageUrls, photoSlides) {
 const MODE_COPY = {
     carousel: {
         heading: '카드뉴스 슬라이드 프리뷰',
-        hint: '각 카드의 <b>＋ 사진</b> 버튼을 누르면 그 카드 <b>상단에 사진</b>이 들어가고, 글은 작아지면서 아래쪽으로 내려갑니다. 표지에는 넣을 수 없어요.'
+        hint: '각 카드의 <b>＋ 사진</b> 버튼을 누르면 그 카드 <b>상단에 사진</b>이 들어가고, 글은 작아지면서 아래쪽으로 내려갑니다. 표지에는 넣을 수 없어요.',
+        subPlaceholder: '제목 바로 아래에 들어갈 내용을 최대 3줄까지 입력하세요. (비워두면 제목만 들어갑니다)'
     },
     single: {
         heading: '1장 카드뉴스 프리뷰',
-        hint: '카드에 마우스를 올리면 나오는 <b>📷 사진 교체</b> 버튼으로 배경 사진을 바꿀 수 있어요. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)'
+        hint: '카드에 마우스를 올리면 나오는 <b>📷 사진 교체</b> 버튼으로 배경 사진을 바꿀 수 있어요. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)',
+        subPlaceholder: '제목 아래 본문입니다. 중요한 내용이 많으면 최대 5줄까지 쓸 수 있어요. (비워두면 제목만 들어갑니다)'
     }
 };
 
@@ -643,6 +652,14 @@ function applyModeUI(mode) {
     if (insertHint) insertHint.innerHTML = copy.hint;
 
     const isSingle = mode === 'single';
+
+    // The same box takes three cover lines or five one-card body lines, so it
+    // grows and relabels itself with the format.
+    if (coverSubInput) {
+        coverSubInput.rows = isSingle ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
+        if (copy.subPlaceholder) coverSubInput.placeholder = copy.subPlaceholder;
+    }
+
     [reelBtn, reelYtBtn].forEach((btn) => {
         if (btn) btn.classList.toggle('hidden', isSingle);
     });

@@ -548,19 +548,27 @@ def strip_highlight_markers(text: str) -> tuple:
 # three-line box under the title field, and the renderer honours the same cap.
 COVER_SUB_MAX_LINES = 3
 
+# The one-card post carries its whole story in the body block under the
+# headline, so it gets a roomier cap: three or four lines normally, up to five
+# when the article holds more facts the reader must not miss.
+SINGLE_BODY_MAX_LINES = 5
 
-def cover_sub_lines(text: Optional[str]) -> list:
+
+def cover_sub_lines(text: Optional[str], max_lines: int = COVER_SUB_MAX_LINES) -> list:
     """
-    Cleans the cover sub-copy into at most COVER_SUB_MAX_LINES typed lines.
+    Cleans typed sub-copy into at most `max_lines` lines.
 
     Blank lines are dropped so a stray newline from the dashboard textarea does
-    not eat one of the three slots. Each surviving line keeps its own '**...**'
+    not eat one of the slots. Each surviving line keeps its own '**...**'
     markers, which the renderer paints in the theme's key color.
+
+    The cover keeps the default cap; the one-card body passes the roomier
+    SINGLE_BODY_MAX_LINES.
     """
     if not text:
         return []
     lines = [line.strip() for line in remove_emojis(str(text)).split("\n")]
-    return [line for line in lines if line][:COVER_SUB_MAX_LINES]
+    return [line for line in lines if line][:max_lines]
 
 
 def _text_width(font, text: str) -> int:
@@ -1116,6 +1124,9 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         headline = break_after_commas(headline)
 
         body_text = break_after_commas(remove_emojis((slide.get("sub_text") or "").strip()))
+        # Three to five typed lines carry the story. Anything past the cap is
+        # dropped rather than allowed to push the block up over the photo.
+        body_logical = [line for line in body_text.split("\n") if line.strip()][:SINGLE_BODY_MAX_LINES]
 
         badge_h = single_spec["badge_h"]
         block_bottom = H - single_spec["block_bottom"]
@@ -1133,9 +1144,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             # One line of the body is wrapped in **...**: that is the sentence the
             # reader should remember, so it gets the theme's key color.
             body_lines = []
-            for logical in body_text.split("\n"):
-                if not logical.strip():
-                    continue
+            for logical in body_logical:
                 clean, has_highlight = strip_highlight_markers(logical)
                 line_font = body_font_bold if has_highlight else body_font
                 line_color = key_color if has_highlight else (226, 228, 234, 255)
