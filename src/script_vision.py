@@ -1047,7 +1047,8 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
         title_text, _ = strip_highlight_markers(title_text)
         title_text = remove_emojis(title_text)
-        title_text = break_after_commas(title_text)
+        # The cover title keeps its commas inline: a headline reads as one
+        # sentence, so only the width of the card decides where it wraps.
 
         # Sub-copy under the title: up to three lines the user types in the
         # dashboard. A freshly generated post has none, so a cover without
@@ -1121,7 +1122,7 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             headline = (article_title or hooking_title or "").strip()
         headline, _ = strip_highlight_markers(headline)
         headline = remove_emojis(headline)
-        headline = break_after_commas(headline)
+        # Same as the cover: the headline wraps on width alone, not on commas.
 
         body_text = break_after_commas(remove_emojis((slide.get("sub_text") or "").strip()))
         # Three to five typed lines carry the story. Anything past the cap is
