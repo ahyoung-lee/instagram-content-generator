@@ -447,27 +447,6 @@ def format_korean_line_breaks(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
-def break_after_commas(text: str) -> str:
-    """
-    Starts a new line after every comma, so a card never carries a clause past a
-    pause. The comma stays at the end of the line it ends.
-
-    A comma sitting between two digits ("1,000원") is a thousands separator, not
-    a pause, so it is left alone. Each source line is processed on its own, which
-    keeps a line that ends in a comma from producing an empty line.
-    """
-    if not text:
-        return text
-
-    SEPARATOR = "\x00"  # stands in for thousands separators while we split
-    lines = []
-    for line in text.split("\n"):
-        protected = re.sub(r'(?<=\d),(?=\d)', SEPARATOR, line)
-        broken = re.sub(r',[ \t]*', ',\n', protected)
-        lines.append(broken.replace(SEPARATOR, ",").rstrip())
-    return "\n".join(lines)
-
-
 def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, stroke_fill=None, **kwargs):
     """
     Safely draws text. Detects emojis and draws them using system emoji fonts
@@ -1124,7 +1103,9 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         headline = remove_emojis(headline)
         # Same as the cover: the headline wraps on width alone, not on commas.
 
-        body_text = break_after_commas(remove_emojis((slide.get("sub_text") or "").strip()))
+        # The body keeps its commas inline: a sentence reads as one thought,
+        # so only the width of the card decides where it wraps.
+        body_text = remove_emojis((slide.get("sub_text") or "").strip())
         # Three to five typed lines carry the story. Anything past the cap is
         # dropped rather than allowed to push the block up over the photo.
         body_logical = [line for line in body_text.split("\n") if line.strip()][:SINGLE_BODY_MAX_LINES]
@@ -1239,7 +1220,6 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             main_text = slide.get("main_text", "")
             main_text, _ = strip_highlight_markers(main_text)
             main_text = remove_emojis(main_text)
-            main_text = break_after_commas(main_text)
             render_lines = [(line, content_font_bold, key_color)
                             for line in wrap_text(main_text, content_font_bold, card_spec["wrap"])]
         else:
@@ -1251,7 +1231,6 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             main_text = slide.get("main_text", "")
             main_text = remove_emojis(main_text)
             main_text = format_korean_line_breaks(main_text)
-            main_text = break_after_commas(main_text)
 
             # Visual hierarchy for a clean, premium look:
             #  - Header line (e.g. "1. 소제목")  -> bold, near-white
