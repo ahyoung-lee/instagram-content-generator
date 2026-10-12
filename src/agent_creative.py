@@ -4,6 +4,8 @@ import random
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from src.script_vision import random_style
+
 # Load environment variables
 load_dotenv()
 
@@ -191,6 +193,7 @@ JSON 스키마:
         if all(key in data for key in required_keys):
             # Assign the color theme at random (ignore any topic-based value the model returned)
             data["theme"] = random.choice(AVAILABLE_THEMES)
+            data["style"] = random_style()
             return _normalize_slides(data)
         else:
             raise ValueError("Response missing required keys")
@@ -209,6 +212,7 @@ JSON 스키마:
         fallback_copy["final_caption"] = f"{article_title}\n지금 가장 주목받는 핵심 이슈만 정리했어요.\n놓치면 안 되는 배경과 포인트를 함께 짚었습니다.\n\n#트렌드이슈 #뉴스요약 #실시간트렌드"
         fallback_copy["image_prompt"] = f"A photorealistic editorial photograph representing {article_title[:20]}, real objects and natural materials, soft directional daylight, shallow depth of field, dark uncluttered bottom third."
         fallback_copy["theme"] = random.choice(AVAILABLE_THEMES)
+        fallback_copy["style"] = random_style()
         return fallback_copy
 
 
@@ -223,6 +227,7 @@ def _single_card_plan(headline: str, card_text: str, caption: str, image_prompt:
     return {
         "total_pages": 1,
         "theme": random.choice(AVAILABLE_THEMES),
+        "style": random_style(),
         "hooking_title": headline,
         "slides": [
             {

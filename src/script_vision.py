@@ -1,11 +1,12 @@
 import os
 import re
+import random
 import requests
 import urllib.parse
 from io import BytesIO
 from typing import Optional
 from openai import OpenAI
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -30,10 +31,10 @@ CANVASES = {
         "page_from_bottom": 92,        # page indicator: centered, just above the bar
         "page_font": 26,
         "cover": {
-            "grad_start": 500,
-            "badge_box": (80, 650, 390, 695),
+            "grad_start": 300,
+            "badge_box": (80, 460, 390, 505),
             "badge_font": 22,
-            "title_top": 730,
+            "title_top": 540,
             "title_wrap": 920,
             "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
             # Optional sub-copy typed under the title from the dashboard
@@ -55,8 +56,8 @@ CANVASES = {
         # the darkened lower half of the photo. It carries more copy than a
         # cover, so its gradient starts higher and reaches full strength sooner.
         "single": {
-            "grad_start": 260,
-            "grad_full": 620,
+            "grad_start": 120,
+            "grad_full": 480,
             "grad_alpha": 232,
             "badge_text": "오늘의 한 장",
             "badge_font": 26,
@@ -67,8 +68,8 @@ CANVASES = {
             "title_body_gap": 38,
             # (headline size, headline line height, body size, body line height)
             "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
-            "block_bottom": 168,      # bottom edge of the text block, from H
-            "block_top_min": 430,     # never push the block higher (keeps the photo visible)
+            "block_bottom": 340,      # bottom edge of the text block, from H
+            "block_top_min": 300,     # never push the block higher (keeps the photo visible)
             "sign_from_bottom": 118,
             "sign_font": 26,
             "sign_text": "always good",
@@ -99,10 +100,10 @@ CANVASES = {
         "page_from_bottom": 74,
         "page_font": 28,
         "cover": {
-            "grad_start": 340,
-            "badge_box": (140, 470, 470, 518),
+            "grad_start": 200,
+            "badge_box": (140, 340, 470, 388),
             "badge_font": 26,
-            "title_top": 560,
+            "title_top": 430,
             "title_wrap": 1250,
             "title_steps": ((96, 128), (86, 116), (76, 102), (66, 90)),
             "sub_font": 34,
@@ -117,8 +118,8 @@ CANVASES = {
             "teaser_text": "always good",
         },
         "single": {
-            "grad_start": 150,
-            "grad_full": 430,
+            "grad_start": 60,
+            "grad_full": 330,
             "grad_alpha": 232,
             "badge_text": "오늘의 한 장",
             "badge_font": 30,
@@ -128,8 +129,8 @@ CANVASES = {
             "body_wrap": 1300,
             "title_body_gap": 34,
             "steps": ((88, 116, 44, 68), (78, 102, 40, 62), (68, 90, 36, 56), (60, 80, 32, 50)),
-            "block_bottom": 150,
-            "block_top_min": 250,
+            "block_bottom": 250,
+            "block_top_min": 170,
             "sign_from_bottom": 100,
             "sign_font": 30,
             "sign_text": "always good",
@@ -166,10 +167,10 @@ CANVASES = {
         "page_from_bottom": 536,
         "page_font": 26,
         "cover": {
-            "grad_start": 710,
-            "badge_box": (80, 900, 390, 945),
+            "grad_start": 450,
+            "badge_box": (80, 650, 390, 695),
             "badge_font": 22,
-            "title_top": 980,
+            "title_top": 730,
             "title_wrap": 920,
             "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
             "sub_font": 27,
@@ -183,8 +184,8 @@ CANVASES = {
             "teaser_text_video": "always good",
         },
         "single": {
-            "grad_start": 330,
-            "grad_full": 750,
+            "grad_start": 180,
+            "grad_full": 600,
             "grad_alpha": 232,
             "badge_text": "오늘의 한 장",
             "badge_font": 26,
@@ -194,8 +195,8 @@ CANVASES = {
             "body_wrap": 880,
             "title_body_gap": 38,
             "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
-            "block_bottom": 630,
-            "block_top_min": 500,
+            "block_bottom": 850,
+            "block_top_min": 380,
             "sign_from_bottom": 570,
             "sign_font": 26,
             "sign_text": "always good",
@@ -235,6 +236,54 @@ THEMES = {
     "red":    {"key": (255, 59, 48, 255),  "grad_start": (28, 12, 12), "grad_end": (50, 12, 10)},
 }
 DEFAULT_THEME = "orange"
+
+# Per-post look. Every post used to share one layout, so a feed of them read as
+# mass-produced from a single template. The creative agent rolls one value per
+# key when the plan is made and stores it in the plan, so the carousel, the
+# YouTube frames and the Shorts cut of the same post all match. A plan without
+# a "style" (posts made before this existed) keeps the original look.
+STYLE_OPTIONS = {
+    "cover_align": ("left", "center"),          # cover / one-card text block
+    "card": ("glass", "tint", "outline"),       # content card surface
+    "text_align": ("center", "left"),           # copy inside content cards
+    "grade": ("none", "warm", "cool", "matte", "contrast"),  # background photo color grade
+}
+DEFAULT_STYLE = {"cover_align": "left", "card": "glass", "text_align": "center", "grade": "none"}
+
+
+def random_style() -> dict:
+    return {key: random.choice(values) for key, values in STYLE_OPTIONS.items()}
+
+
+def get_style(style: Optional[dict]) -> dict:
+    """Resolves a stored style, falling back per key to the original look."""
+    resolved = dict(DEFAULT_STYLE)
+    for key, value in (style or {}).items():
+        if key in STYLE_OPTIONS and value in STYLE_OPTIONS[key]:
+            resolved[key] = value
+    return resolved
+
+
+def apply_color_grade(image: Image.Image, grade: str) -> Image.Image:
+    """Gives the background photo one of a few light color grades."""
+    if grade == "none":
+        return image
+    rgb = image.convert("RGB")
+    if grade in ("warm", "cool"):
+        r, g, b = rgb.split()
+        up, down = (1.06, 0.92) if grade == "warm" else (0.93, 1.07)
+        r = r.point(lambda v: min(255, int(v * up)))
+        b = b.point(lambda v: min(255, int(v * down)))
+        rgb = Image.merge("RGB", (r, g, b))
+    elif grade == "matte":
+        # Lifted blacks and softer color, like a faded print.
+        rgb = ImageEnhance.Contrast(rgb).enhance(0.86)
+        rgb = ImageEnhance.Color(rgb).enhance(0.85)
+        rgb = rgb.point(lambda v: int(14 + v * (241 / 255)))
+    elif grade == "contrast":
+        rgb = ImageEnhance.Contrast(rgb).enhance(1.12)
+        rgb = ImageEnhance.Color(rgb).enhance(0.9)
+    return rgb
 
 def get_theme(name: str) -> dict:
     """Resolves a theme name to its palette, falling back to the default theme."""
@@ -722,6 +771,23 @@ def draw_logo_watermark(image: Image.Image, opacity: float = 0.45,
     except Exception as e:
         print(f"Failed to draw logo watermark: {e}")
 
+PHOTO_CAMERAS = (
+    "shot on a full-frame DSLR with a 50mm prime lens, shallow depth of field",
+    "shot on a 35mm lens at eye level, moderate depth of field",
+    "shot on 35mm film with visible natural grain",
+    "shot on a smartphone camera, casual handheld framing",
+    "shot on a medium-format camera with an 80mm lens",
+    "shot from a slightly high angle with a 28mm lens",
+)
+PHOTO_LIGHTS = (
+    "soft natural window light",
+    "warm golden-hour sunlight",
+    "even overcast daylight",
+    "late-evening ambient light with practical lamps",
+    "crisp midday light with defined shadows",
+    "cool early-morning light",
+)
+
 def generate_dalle_background(prompt_text: str) -> Image.Image:
     """
     Calls OpenAI Image API to generate a background image based on the provided prompt_text.
@@ -742,14 +808,19 @@ def generate_dalle_background(prompt_text: str) -> Image.Image:
         is_english = prompt_text and any(c.isalpha() for c in prompt_text) and not any(ord(c) > 127 for c in prompt_text)
 
         # Shared style rules so both language branches produce the same photographic look.
+        # The camera and light vary per image so the backgrounds don't all share
+        # one recognizable "AI stock photo" look.
         PHOTO_STYLE = (
-            "Photorealistic editorial photograph, shot on a full-frame DSLR with a 50mm prime lens, "
-            "natural directional lighting, shallow depth of field, realistic materials and surface texture, "
-            "true-to-life colors, subtle film grain, high dynamic range, sharp focus on the main subject. "
+            "Photorealistic editorial photograph, "
+            + random.choice(PHOTO_CAMERAS) + ", "
+            + random.choice(PHOTO_LIGHTS) + ", "
+            "realistic materials and surface texture, true-to-life colors, "
+            "sharp focus on the main subject. "
         )
-        # The cover title sits over a dark bottom gradient, so the lower third must stay visually quiet.
+        # The cover title starts a little above the middle of the card, over a dark gradient,
+        # so the subject belongs in the top part and everything below it must stay quiet.
         COMPOSITION = (
-            "Center the subject in the upper two thirds of the frame; keep the bottom third simple, "
+            "Place the subject in the top third of the frame; keep the middle and bottom of the frame simple, "
             "uncluttered and darker (plain surface, shadow, or soft bokeh) so overlaid text stays readable. "
         )
         NEGATIVES = (
@@ -926,7 +997,8 @@ def apply_dark_gradient(image: Image.Image, width: int, height: int, start_y: in
     return Image.alpha_composite(image, overlay)
 
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS, for_video: bool = False) -> Image.Image:
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS, for_video: bool = False,
+                     style: Optional[dict] = None) -> Image.Image:
     """
     Generates a single image slide based on its content and type.
     Uses a premium glassmorphic card news layout structure for content/CTA,
@@ -935,9 +1007,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
     `canvas` picks the shape: "portrait" (4:5 Instagram) or "landscape" (16:9
     YouTube); the layout numbers for each live in CANVASES. `for_video` marks a
     card that will end up in a video rather than in the swipeable carousel, which
-    swaps the cover's swipe prompt for the brand sign-off.
+    swaps the cover's swipe prompt for the brand sign-off. `style` is the
+    post's look (see STYLE_OPTIONS).
     """
     slide_type = slide.get("type", "content")
+    look = get_style(style)
+    centered = look["cover_align"] == "center"
     theme_data = get_theme(theme)
     key_color = theme_data["key"]  # theme accent color
 
@@ -1012,6 +1087,8 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
         # Draw cover top badge
         bx0, by0, bx1, by1 = cover_spec["badge_box"]
+        if centered:
+            bx0, bx1 = (W - (bx1 - bx0)) // 2, (W + (bx1 - bx0)) // 2
         draw.rounded_rectangle([bx0, by0, bx1, by1], radius=15, fill=key_color)
         badge_font = get_system_font(cover_spec["badge_font"])
         draw.text((bx0 + 30, by0 + 10), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
@@ -1071,17 +1148,19 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
 
         y_cursor = y_start
         for line in lines:
+            x = (W - _text_width(title_font, line)) // 2 if centered else margin
             # Draw a subtle drop shadow (semi-transparent dark gray) at (3, 3) offset
-            draw_text_safe(draw, (margin + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
+            draw_text_safe(draw, (x + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
             # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
-            draw_text_safe(draw, (margin, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
+            draw_text_safe(draw, (x, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
             y_cursor += line_height
 
         if sub_lines:
             y_cursor += sub_gap
             for text, line_font, line_color in sub_lines:
-                draw_text_safe(draw, (margin + 2, y_cursor + 2), text, fill=(10, 10, 15, 190), font=line_font)
-                draw_text_safe(draw, (margin, y_cursor), text, fill=line_color, font=line_font)
+                x = (W - _text_width(line_font, text)) // 2 if centered else margin
+                draw_text_safe(draw, (x + 2, y_cursor + 2), text, fill=(10, 10, 15, 190), font=line_font)
+                draw_text_safe(draw, (x, y_cursor), text, fill=line_color, font=line_font)
                 y_cursor += sub_line_h
 
         # Draw teaser text at the bottom. The logo moved to the top-left corner,
@@ -1090,7 +1169,8 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         if for_video:
             teaser_text = cover_spec.get("teaser_text_video", teaser_text)
         teaser_font = get_system_font(cover_spec["teaser_font"])
-        draw.text((margin, H - cover_spec["teaser_from_bottom"]), teaser_text, fill=key_color, font=teaser_font)
+        teaser_x = (W - _text_width(teaser_font, teaser_text)) // 2 if centered else margin
+        draw.text((teaser_x, H - cover_spec["teaser_from_bottom"]), teaser_text, fill=key_color, font=teaser_font)
 
     elif slide_type == "single":
         # One-card post: the whole story lives on this single image, so the
@@ -1150,27 +1230,32 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
             badge_text_w, badge_text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
         else:
             badge_text_w, badge_text_h = len(badge_text) * 11, single_spec["badge_font"]
-        draw.rounded_rectangle([margin, y_cursor, margin + badge_text_w + 60, y_cursor + badge_h],
+        badge_x = (W - badge_text_w - 60) // 2 if centered else margin
+        draw.rounded_rectangle([badge_x, y_cursor, badge_x + badge_text_w + 60, y_cursor + badge_h],
                                radius=15, fill=key_color)
-        draw.text((margin + 30, y_cursor + (badge_h - badge_text_h) // 2 - 2), badge_text,
+        draw.text((badge_x + 30, y_cursor + (badge_h - badge_text_h) // 2 - 2), badge_text,
                   fill=(255, 255, 255, 255), font=badge_font)
         y_cursor += badge_h + single_spec["badge_gap"]
 
         for line in title_lines:
-            draw_text_safe(draw, (margin + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font)
-            draw_text_safe(draw, (margin, y_cursor), line, fill=(255, 255, 255, 255), font=title_font)
+            x = (W - _text_width(title_font, line)) // 2 if centered else margin
+            draw_text_safe(draw, (x + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font)
+            draw_text_safe(draw, (x, y_cursor), line, fill=(255, 255, 255, 255), font=title_font)
             y_cursor += title_line
 
         if body_lines:
             y_cursor += single_spec["title_body_gap"]
             for text, line_font, line_color in body_lines:
-                draw_text_safe(draw, (margin + 2, y_cursor + 2), text, fill=(10, 10, 15, 170), font=line_font)
-                draw_text_safe(draw, (margin, y_cursor), text, fill=line_color, font=line_font)
+                x = (W - _text_width(line_font, text)) // 2 if centered else margin
+                draw_text_safe(draw, (x + 2, y_cursor + 2), text, fill=(10, 10, 15, 170), font=line_font)
+                draw_text_safe(draw, (x, y_cursor), text, fill=line_color, font=line_font)
                 y_cursor += body_line
 
         # No next card to tease, so the card signs off with the brand name.
         sign_font = get_system_font(single_spec["sign_font"])
-        draw.text((margin, H - single_spec["sign_from_bottom"]), single_spec["sign_text"],
+        sign_text = single_spec["sign_text"]
+        sign_x = (W - _text_width(sign_font, sign_text)) // 2 if centered else margin
+        draw.text((sign_x, H - single_spec["sign_from_bottom"]), sign_text,
                   fill=key_color, font=sign_font)
 
     else:
@@ -1188,13 +1273,24 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         else:
             card_fill = (12, 12, 20, 210)  # ~82% opacity
             card_border = (255, 255, 255, 40)
-            
+        card_radius, border_width = 35, 2
+        if look["card"] == "tint":
+            # Dark card washed with the theme color, sharper corners.
+            card_fill = (12 + key_color[0] // 7, 12 + key_color[1] // 7, 20 + key_color[2] // 7, 218)
+            card_border = (key_color[0], key_color[1], key_color[2], 110)
+            card_radius = 18
+        elif look["card"] == "outline":
+            # See-through card with a bold theme-colored frame.
+            card_fill = (8, 8, 14, 185)
+            card_border = (key_color[0], key_color[1], key_color[2], 230)
+            card_radius, border_width = 6, 4
+
         card_draw.rounded_rectangle(
             [card_x0, card_y0, card_x1, card_y1],
-            radius=35,
+            radius=card_radius,
             fill=card_fill,
             outline=card_border,
-            width=2
+            width=border_width
         )
         
         # Alpha composite the card onto the main background
@@ -1305,9 +1401,12 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
         total_text_height = len(render_lines) * line_height
         y_cursor = text_top + max(0, (card_content_height - total_text_height) // 2)
 
+        # Left-aligned copy starts where the wrap width begins, so the block
+        # stays centered in the card as a whole.
+        left_x = card_x0 + ((card_x1 - card_x0) - card_spec["wrap"]) // 2
         for text, line_font, line_color in render_lines:
             w = _text_width(line_font, text)
-            x_pos = (W - w) // 2
+            x_pos = left_x if look["text_align"] == "left" else (W - w) // 2
             draw_text_safe(draw, (x_pos, y_cursor), text, fill=line_color, font=line_font)
             y_cursor += line_height
 
@@ -1375,11 +1474,17 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
             if (canvas_w, canvas_h) != (WIDTH, HEIGHT):
                 bg_image = resize_to_cover(raw_bg, canvas_w, canvas_h)
 
+    # The grade is applied at render time, so the stored master stays untouched.
+    style = plan.get("style")
+    if bg_image is not None:
+        bg_image = apply_color_grade(bg_image, get_style(style)["grade"])
+
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
         img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title,
-                               theme=theme, photo_dir=output_dir, canvas=canvas, for_video=for_video)
+                               theme=theme, photo_dir=output_dir, canvas=canvas, for_video=for_video,
+                               style=style)
 
         filename = f"{filename_prefix}_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)
