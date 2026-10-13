@@ -755,7 +755,6 @@ def _video_cards(post_dir: str, ordered_paths: list, orientation: str) -> list:
             allow_paid_background=False,   # never buy a new background for the video
             canvas=canvas,
             filename_prefix=prefix,
-            for_video=True,
         )
     except Exception as e:
         print(f"[reel] {canvas} render failed ({e}); using the carousel cards.", flush=True)

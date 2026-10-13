@@ -16,233 +16,77 @@ load_dotenv()
 WIDTH = 1080
 HEIGHT = 1350
 
-# Card canvases. "portrait" is the Instagram carousel card and its numbers are
-# exactly the ones this layout was tuned with. "landscape" redraws the same
-# content on a 16:9 frame for YouTube, so the video fills the screen instead of
-# sitting between blurred pillarbox bars. Every position the layout code needs
-# lives here, so the two shapes share one code path.
+# Card canvases. Every card is drawn natively at its canvas size, so text stays
+# crisp: "portrait" is the 4:5 Instagram carousel, "landscape" the 16:9 YouTube
+# frame and "story" the 9:16 Shorts/Reels frame. `paper` holds every position
+# the newspaper layout needs, so the shapes share one code path.
 CANVASES = {
     "portrait": {
         "size": (WIDTH, HEIGHT),
         "margin": 80,
-        "watermark_pos": (50, 50),
-        "watermark_width": 160,
-        "bar_from_bottom": (35, 31),   # accent bar: top/bottom offsets from H
-        "page_from_bottom": 92,        # page indicator: centered, just above the bar
-        "page_font": 26,
-        "cover": {
-            "grad_start": 300,
-            "badge_box": (80, 460, 390, 505),
-            "badge_font": 22,
-            "title_top": 540,
-            "title_wrap": 920,
-            "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
-            # Optional sub-copy typed under the title from the dashboard
-            # (up to COVER_SUB_MAX_LINES lines). Absent on a fresh post.
-            "sub_font": 30,
-            "sub_line": 46,
-            "sub_gap": 30,
-            "sub_wrap": 900,
-            "teaser_from_bottom": 143,
-            "teaser_clear": 150,
-            "teaser_font": 26,
-            # The carousel is swiped, so it keeps the swipe prompt. A video has
-            # nothing to swipe, so `teaser_text_video` signs off with the brand
-            # name instead (see the `for_video` flag).
-            "teaser_text": "옆으로 넘겨서 보기 ▶",
-            "teaser_text_video": "always good",
-        },
-        # The carousel cover, laid out like a newspaper front page: a ruled
-        # header, a left-aligned headline of up to four lines and the photo in a
-        # box at the bottom (see draw_paper_cover).
         "paper": {
             "header_top": 95, "header_h": 56, "header_font": 26,
+            "rule_y": 1245, "logo": 92, "page_font": 24,
+            # Cover headline zone and sub-copy typed under it on the dashboard.
             "title_top": 215, "title_bottom": 740, "title_wrap": 920,
             "title_steps": ((84, 100), (76, 92), (68, 84), (60, 74)),
             "sub_font": 30, "sub_line": 44, "sub_gap": 22, "sub_wrap": 920,
-            # The box's top follows the headline (min..max), its bottom is fixed.
+            # Cover photo box: its top follows the headline (min..given), its
+            # bottom is fixed.
             "photo_box": (80, 800, 1000, 1180), "photo_top_min": 600, "shadow": 14,
-            "rule_y": 1245,
-        },
-        # The one-card post: headline plus a short body block, both sitting on
-        # the darkened lower half of the photo. It carries more copy than a
-        # cover, so its gradient starts higher and reaches full strength sooner.
-        "single": {
-            "grad_start": 120,
-            "grad_full": 480,
-            "grad_alpha": 232,
-            "badge_text": "오늘의 한 장",
-            "badge_font": 26,
-            "badge_h": 45,
-            "badge_gap": 30,          # badge bottom -> headline top
-            "title_wrap": 920,
-            "body_wrap": 880,
-            "title_body_gap": 38,
-            # (headline size, headline line height, body size, body line height)
-            "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
-            "block_bottom": 340,      # bottom edge of the text block, from H
-            "block_top_min": 300,     # never push the block higher (keeps the photo visible)
-            "sign_from_bottom": 118,
-            "sign_font": 26,
-            "sign_text": "always good",
-        },
-        "card": {
-            "box": (80, 240, 1000, 1130),
-            "wrap": 820,
-            "badge_top": 280,
-            "text_top": 360,
-            "body": 43, "line": 70,
-            "body_photo": 34, "line_photo": 54,
-            "cta": 46, "cta_line": 80,
-            "cta_photo": 36, "cta_line_photo": 56,
-            "photo_min": 340, "photo_max": 640,
-            "min_line": 50, "min_line_photo": 40,
-            "badge_h": 45,
+            # Content cards and the one-card post.
+            "body_top": 205, "body_bottom": 1190, "card_wrap": 920,
+            "badge_font": 24, "badge_h": 48, "badge_gap": 34,
+            "body": (46, 74), "body_photo": (38, 58),      # (size, line height)
+            "cta": (50, 80), "cta_photo": (40, 62), "min_line": 46,
+            "photo_min": 300, "photo_max": 560, "photo_gap": 44,
+            # (headline size, headline line, body size, body line)
+            "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
+            "single_photo_min": 240,
         },
     },
     "landscape": {
-        # 1920x1080 is YouTube's recommended long-form size. All text is drawn
-        # natively at this size, so it stays crisp when the video step scales
-        # the frame down to 1280x720.
+        # 1920x1080 is YouTube's recommended long-form size; the video step
+        # scales it down to 1280x720. Photos sit in a column beside the copy.
         "size": (1920, 1080),
         "margin": 140,
-        "watermark_pos": (60, 55),
-        "watermark_width": 190,
-        "bar_from_bottom": (30, 26),
-        "page_from_bottom": 74,
-        "page_font": 28,
-        "cover": {
-            "grad_start": 200,
-            "badge_box": (140, 340, 470, 388),
-            "badge_font": 26,
-            "title_top": 430,
-            "title_wrap": 1250,
-            "title_steps": ((96, 128), (86, 116), (76, 102), (66, 90)),
-            "sub_font": 34,
-            "sub_line": 52,
-            "sub_gap": 32,
-            "sub_wrap": 1230,
-            "teaser_from_bottom": 118,
-            "teaser_clear": 130,
-            "teaser_font": 30,
-            # This canvas only ever feeds the YouTube video, so there is no
-            # swipe-prompt variant to choose between.
-            "teaser_text": "always good",
-        },
-        # Headline on the left, photo box on the right.
         "paper": {
             "header_top": 70, "header_h": 60, "header_font": 28,
+            "rule_y": 975, "logo": 96, "page_font": 26,
             "title_top": 200, "title_bottom": 920, "title_wrap": 820,
             "title_steps": ((92, 110), (84, 100), (76, 92), (68, 82)),
             "sub_font": 34, "sub_line": 50, "sub_gap": 26, "sub_wrap": 820,
             "photo_box": (1030, 200, 1764, 900), "photo_top_min": 200, "shadow": 16,
-            "rule_y": 975,
-        },
-        "single": {
-            "grad_start": 60,
-            "grad_full": 330,
-            "grad_alpha": 232,
-            "badge_text": "오늘의 한 장",
-            "badge_font": 30,
-            "badge_h": 48,
-            "badge_gap": 28,
-            "title_wrap": 1350,
-            "body_wrap": 1300,
-            "title_body_gap": 34,
-            "steps": ((88, 116, 44, 68), (78, 102, 40, 62), (68, 90, 36, 56), (60, 80, 32, 50)),
-            "block_bottom": 250,
-            "block_top_min": 170,
-            "sign_from_bottom": 100,
-            "sign_font": 30,
-            "sign_text": "always good",
-        },
-        "card": {
-            # Kept well inside the frame: a card spanning the full 1920 would
-            # push lines past a comfortable reading length.
-            "box": (300, 130, 1620, 930),
-            "wrap": 1100,
-            "badge_top": 175,
-            "text_top": 265,
-            "body": 44, "line": 68,
-            "body_photo": 36, "line_photo": 56,
-            "cta": 50, "cta_line": 84,
-            "cta_photo": 40, "cta_line_photo": 62,
-            "photo_min": 220, "photo_max": 430,
-            "min_line": 48, "min_line_photo": 40,
-            "badge_h": 48,
+            "body_top": 185, "body_bottom": 925, "card_wrap": 1500,
+            "badge_font": 26, "badge_h": 50, "badge_gap": 32,
+            "body": (44, 70), "body_photo": (38, 60),
+            "cta": (54, 84), "cta_photo": (44, 68), "min_line": 46,
+            "photo_min": 0, "photo_max": 0, "photo_gap": 40,
+            "single_steps": ((84, 100, 40, 62), (76, 92, 37, 57), (68, 82, 34, 52), (60, 74, 31, 47)),
+            "single_photo_min": 0,
         },
     },
     "story": {
-        # 9:16 for a Shorts/Reels cut. Drawn at 1080x1920 and scaled down by the
-        # video step, so the card fills the phone screen with nothing cropped and
-        # no blurred bands. The bottom 480px (25% of the frame) is left empty:
-        # that band is where the Shorts player stacks its title, handle and
-        # buttons, so nothing of the card may sit there. The logo starts 120px
-        # down for the same reason: YouTube draws its own top bar over the first
-        # ~100px of the frame.
+        # 9:16 for a Shorts/Reels cut. The bottom 480px is left empty: that band
+        # is where the Shorts player stacks its title, handle and buttons. The
+        # header starts 150px down because YouTube draws its own top bar over
+        # the first ~100px of the frame.
         "size": (1080, 1920),
         "margin": 80,
-        "watermark_pos": (50, 120),
-        "watermark_width": 160,
-        "bar_from_bottom": (480, 476),
-        "page_from_bottom": 536,
-        "page_font": 26,
-        "cover": {
-            "grad_start": 450,
-            "badge_box": (80, 650, 390, 695),
-            "badge_font": 22,
-            "title_top": 730,
-            "title_wrap": 920,
-            "title_steps": ((84, 110), (74, 98), (64, 86), (56, 76)),
-            "sub_font": 27,
-            "sub_line": 42,
-            "sub_gap": 26,
-            "sub_wrap": 900,
-            "teaser_from_bottom": 590,
-            "teaser_clear": 600,
-            "teaser_font": 26,
-            "teaser_text": "옆으로 넘겨서 보기 ▶",
-            "teaser_text_video": "always good",
-        },
-        # Starts below YouTube's top bar and ends above the bottom 480px band.
         "paper": {
             "header_top": 150, "header_h": 56, "header_font": 26,
+            "rule_y": 1395, "logo": 92, "page_font": 24,
             "title_top": 275, "title_bottom": 840, "title_wrap": 920,
             "title_steps": ((84, 100), (76, 92), (68, 84), (60, 74)),
             "sub_font": 30, "sub_line": 44, "sub_gap": 22, "sub_wrap": 920,
             "photo_box": (80, 900, 1000, 1330), "photo_top_min": 680, "shadow": 14,
-            "rule_y": 1395,
-        },
-        "single": {
-            "grad_start": 180,
-            "grad_full": 600,
-            "grad_alpha": 232,
-            "badge_text": "오늘의 한 장",
-            "badge_font": 26,
-            "badge_h": 45,
-            "badge_gap": 30,
-            "title_wrap": 920,
-            "body_wrap": 880,
-            "title_body_gap": 38,
-            "steps": ((80, 104, 40, 62), (70, 92, 36, 56), (62, 82, 33, 51), (54, 72, 30, 46)),
-            "block_bottom": 850,
-            "block_top_min": 380,
-            "sign_from_bottom": 570,
-            "sign_font": 26,
-            "sign_text": "always good",
-        },
-        "card": {
-            "box": (80, 290, 1000, 1290),
-            "wrap": 820,
-            "badge_top": 330,
-            "text_top": 410,
-            "body": 43, "line": 70,
-            "body_photo": 34, "line_photo": 54,
-            "cta": 46, "cta_line": 80,
-            "cta_photo": 36, "cta_line_photo": 56,
-            "photo_min": 340, "photo_max": 700,
-            "min_line": 50, "min_line_photo": 40,
-            "badge_h": 45,
+            "body_top": 265, "body_bottom": 1340, "card_wrap": 920,
+            "badge_font": 24, "badge_h": 48, "badge_gap": 34,
+            "body": (46, 74), "body_photo": (38, 58),
+            "cta": (50, 80), "cta_photo": (40, 62), "min_line": 46,
+            "photo_min": 320, "photo_max": 620, "photo_gap": 44,
+            "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
+            "single_photo_min": 260,
         },
     },
 }
@@ -256,67 +100,19 @@ def get_canvas(name: str) -> dict:
     return CANVASES.get(name or DEFAULT_CANVAS, CANVASES[DEFAULT_CANVAS])
 
 # Color themes. The creative agent assigns a theme name at random (independent of
-# the article topic); the renderer maps it to a palette. Each theme defines the
-# key/accent color plus the gradient fallback used when no AI background image is available.
+# the article topic); the renderer uses its key color for the labels, marker
+# strokes and the photo tint.
 THEMES = {
-    "orange": {"key": (255, 102, 0, 255),  "grad_start": (24, 20, 16), "grad_end": (48, 22, 8)},
-    "blue":   {"key": (10, 132, 255, 255), "grad_start": (12, 16, 30), "grad_end": (10, 28, 54)},
-    "green":  {"key": (34, 197, 94, 255),  "grad_start": (12, 24, 18), "grad_end": (8, 38, 26)},
-    "purple": {"key": (149, 97, 246, 255), "grad_start": (22, 16, 34), "grad_end": (34, 16, 50)},
-    "pink":   {"key": (244, 63, 94, 255),  "grad_start": (30, 14, 20), "grad_end": (48, 14, 28)},
-    "teal":   {"key": (20, 184, 166, 255), "grad_start": (10, 26, 26), "grad_end": (8, 38, 38)},
-    "yellow": {"key": (250, 204, 21, 255), "grad_start": (26, 22, 8),  "grad_end": (44, 34, 6)},
-    "red":    {"key": (255, 59, 48, 255),  "grad_start": (28, 12, 12), "grad_end": (50, 12, 10)},
+    "orange": {"key": (255, 102, 0, 255)},
+    "blue":   {"key": (10, 132, 255, 255)},
+    "green":  {"key": (34, 197, 94, 255)},
+    "purple": {"key": (149, 97, 246, 255)},
+    "pink":   {"key": (244, 63, 94, 255)},
+    "teal":   {"key": (20, 184, 166, 255)},
+    "yellow": {"key": (250, 204, 21, 255)},
+    "red":    {"key": (255, 59, 48, 255)},
 }
 DEFAULT_THEME = "orange"
-
-# Per-post look. Every post used to share one layout, so a feed of them read as
-# mass-produced from a single template. The creative agent rolls one value per
-# key when the plan is made and stores it in the plan, so the carousel, the
-# YouTube frames and the Shorts cut of the same post all match. A plan without
-# a "style" (posts made before this existed) keeps the original look.
-STYLE_OPTIONS = {
-    "cover_align": ("left", "center"),          # cover / one-card text block
-    "card": ("glass", "tint", "outline"),       # content card surface
-    "text_align": ("center", "left"),           # copy inside content cards
-    "grade": ("none", "warm", "cool", "matte", "contrast"),  # background photo color grade
-}
-DEFAULT_STYLE = {"cover_align": "left", "card": "glass", "text_align": "center", "grade": "none"}
-
-
-def random_style() -> dict:
-    return {key: random.choice(values) for key, values in STYLE_OPTIONS.items()}
-
-
-def get_style(style: Optional[dict]) -> dict:
-    """Resolves a stored style, falling back per key to the original look."""
-    resolved = dict(DEFAULT_STYLE)
-    for key, value in (style or {}).items():
-        if key in STYLE_OPTIONS and value in STYLE_OPTIONS[key]:
-            resolved[key] = value
-    return resolved
-
-
-def apply_color_grade(image: Image.Image, grade: str) -> Image.Image:
-    """Gives the background photo one of a few light color grades."""
-    if grade == "none":
-        return image
-    rgb = image.convert("RGB")
-    if grade in ("warm", "cool"):
-        r, g, b = rgb.split()
-        up, down = (1.06, 0.92) if grade == "warm" else (0.93, 1.07)
-        r = r.point(lambda v: min(255, int(v * up)))
-        b = b.point(lambda v: min(255, int(v * down)))
-        rgb = Image.merge("RGB", (r, g, b))
-    elif grade == "matte":
-        # Lifted blacks and softer color, like a faded print.
-        rgb = ImageEnhance.Contrast(rgb).enhance(0.86)
-        rgb = ImageEnhance.Color(rgb).enhance(0.85)
-        rgb = rgb.point(lambda v: int(14 + v * (241 / 255)))
-    elif grade == "contrast":
-        rgb = ImageEnhance.Contrast(rgb).enhance(1.12)
-        rgb = ImageEnhance.Color(rgb).enhance(0.9)
-    return rgb
 
 def get_theme(name: str) -> dict:
     """Resolves a theme name to its palette, falling back to the default theme."""
@@ -581,20 +377,6 @@ def draw_text_safe(draw, xy, text, fill, font, stroke_width=0, stroke_fill=None,
             w = current_font.getbbox(segment)[2] - current_font.getbbox(segment)[0]
         x += w
 
-def draw_gradient_background(width: int, height: int, color_start: tuple, color_end: tuple) -> Image.Image:
-    """
-    Creates a smooth vertical linear gradient background.
-    """
-    base = Image.new("RGBA", (width, height), color_start)
-    draw = ImageDraw.Draw(base)
-    for y in range(height):
-        ratio = y / height
-        r = int(color_start[0] + (color_end[0] - color_start[0]) * ratio)
-        g = int(color_start[1] + (color_end[1] - color_start[1]) * ratio)
-        b = int(color_start[2] + (color_end[2] - color_start[2]) * ratio)
-        draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
-    return base
-
 def strip_highlight_markers(text: str) -> tuple:
     """
     Removes '**' emphasis markers from a line and reports whether any were
@@ -733,77 +515,6 @@ def wrap_text(text: str, font, max_width: int) -> list:
         lines.extend(_wrap_balanced(words, font, max_width))
     return lines
 
-def get_relative_luminance(image: Image.Image, box: tuple) -> float:
-    """
-    Calculates the average relative luminance of a region in an image.
-    Formula: Y = 0.2126 * R + 0.7152 * G + 0.0722 * B
-    """
-    cropped = image.crop(box).convert("RGB")
-    pixels = list(cropped.getdata())
-    if not pixels:
-        return 0.0
-    
-    total_r, total_g, total_b = 0, 0, 0
-    for r, g, b in pixels:
-        total_r += r
-        total_g += g
-        total_b += b
-        
-    count = len(pixels)
-    avg_r = (total_r / count) / 255.0
-    avg_g = (total_g / count) / 255.0
-    avg_b = (total_b / count) / 255.0
-    
-    return 0.2126 * avg_r + 0.7152 * avg_g + 0.0722 * avg_b
-
-def draw_logo_watermark(image: Image.Image, opacity: float = 0.45,
-                        pos: tuple = (50, 50), target_width: int = 160):
-    """
-    Loads 'img/alwaysgood_logo.png', resizes it to a suitable size,
-    adjusts its opacity, and pastes it in the top-left corner of the image.
-    `pos`/`target_width` scale it to whichever canvas is being drawn.
-    """
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    workspace_root = os.path.dirname(current_dir)
-    logo_path = os.path.join(workspace_root, "img", "alwaysgood_logo.png")
-    
-    if not os.path.exists(logo_path):
-        # Fallback if run from workspace root
-        logo_path = os.path.join("img", "alwaysgood_logo.png")
-        if not os.path.exists(logo_path):
-            print(f"Warning: Logo watermark not found at {logo_path}")
-            return
-            
-    try:
-        logo = Image.open(logo_path).convert("RGBA")
-
-        # Determine target watermark size (e.g., width 160px)
-        aspect_ratio = logo.height / logo.width
-        target_height = int(target_width * aspect_ratio)
-        
-        try:
-            resample_filter = Image.Resampling.LANCZOS
-        except AttributeError:
-            resample_filter = Image.ANTIALIAS
-            
-        logo = logo.resize((target_width, target_height), resample_filter)
-        
-        # Apply opacity to alpha channel
-        r, g, b, a = logo.split()
-        a = a.point(lambda p: int(p * opacity))
-        transparent_logo = Image.merge("RGBA", (r, g, b, a))
-        
-        # Place in the top-LEFT corner with padding: the right side is covered by
-        # Instagram's action icons on Reels, and the bottom by the caption
-        # preview, so the top-left is the one corner that always stays visible.
-        # It sits clear of the content card, which starts lower down.
-        x, y = pos
-
-        # Paste with transparent mask
-        image.paste(transparent_logo, (x, y), transparent_logo)
-    except Exception as e:
-        print(f"Failed to draw logo watermark: {e}")
-
 PHOTO_CAMERAS = (
     "shot on a full-frame DSLR with a 50mm prime lens, shallow depth of field",
     "shot on a 35mm lens at eye level, moderate depth of field",
@@ -828,7 +539,7 @@ def generate_dalle_background(prompt_text: str) -> Image.Image:
     """
     openai_key = os.getenv("OPENAI_API_KEY")
     if not openai_key or "your_openai_api_key" in openai_key:
-        print("Warning: OPENAI_API_KEY is not configured for AI background generation. Falling back to gradient.")
+        print("Warning: OPENAI_API_KEY is not configured for AI background generation. Drawing without a photo.")
         return None
 
     try:
@@ -914,7 +625,7 @@ def generate_dalle_background(prompt_text: str) -> Image.Image:
         else:
             raise ValueError("No image data (b64_json or url) returned in OpenAI response.")
     except Exception as e:
-        print(f"Error generating AI background via OpenAI: {e}. Falling back to gradient.")
+        print(f"Error generating AI background via OpenAI: {e}. Drawing without a photo.")
         return None
 
 def resize_to_cover(image: Image.Image, target_width: int, target_height: int,
@@ -973,52 +684,17 @@ def save_uploaded_photo(file_bytes: bytes, output_dir: str, filename: str) -> st
     print(f"Saved uploaded photo: {filepath}")
     return filepath
 
-def fit_photo_to_canvas(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
-    """
-    Fits a user photo to a card. A photo as tall as the card (or taller) simply
-    covers it. A photo wider than the card is not cropped down to its middle:
-    it keeps its full width across the top, and the space below is filled with a
-    blurred, darkened copy of the same photo that the title is written on.
-    """
-    img_ratio = image.width / image.height
-    if img_ratio <= (target_width / target_height) * 1.05:
-        return resize_to_cover(image, target_width, target_height)
-
-    try:
-        resample_filter = Image.Resampling.LANCZOS
-    except AttributeError:
-        resample_filter = Image.ANTIALIAS
-
-    # Backdrop: the same photo, covered, blurred and darkened.
-    base = resize_to_cover(image, target_width, target_height).filter(ImageFilter.GaussianBlur(30))
-    base = Image.blend(base, Image.new("RGB", base.size, (10, 10, 15)), 0.45)
-
-    photo_h = int(target_width / img_ratio)
-    photo = image.resize((target_width, photo_h), resample_filter)
-
-    # Fade the photo's bottom edge into the backdrop instead of a hard seam.
-    fade = min(160, photo_h // 3)
-    mask = Image.new("L", (target_width, photo_h), 255)
-    mask_draw = ImageDraw.Draw(mask)
-    for i in range(fade):
-        y = photo_h - fade + i
-        mask_draw.line([(0, y), (target_width, y)], fill=int(255 * (1 - i / fade)))
-
-    base.paste(photo, (0, 0), mask)
-    return base
-
-
 def save_background_master(file_bytes: bytes, output_dir: str) -> str:
     """
-    Stores a user-supplied photo as this post's background master at the 4:5
-    card size (a landscape photo sits across the top, see fit_photo_to_canvas).
-    Every card is then drawn over that photo instead of over an AI-generated
-    one, so attaching a photo also skips the paid image API call. The original
-    is kept too, so other canvases (16:9 video) are fitted from it.
+    Stores a user-supplied photo as this post's photo, used instead of an
+    AI-generated one, so attaching a photo also skips the paid image API call.
+    The original is kept uncropped (each photo box crops it to its own shape,
+    so a landscape photo works as well as a portrait one); the 4:5 master copy
+    is the fallback for older code paths.
     """
     os.makedirs(output_dir, exist_ok=True)
     img = Image.open(BytesIO(file_bytes)).convert("RGB")
-    cover = fit_photo_to_canvas(img, WIDTH, HEIGHT)
+    cover = resize_to_cover(img, WIDTH, HEIGHT)
 
     filepath = os.path.join(output_dir, "background_master.png")
     cover.save(filepath, "PNG")
@@ -1035,44 +711,13 @@ def resolve_user_photo(slide: dict, photo_dir: str) -> Optional[str]:
     return path if os.path.exists(path) else None
 
 
-def paste_slide_photo(image: Image.Image, photo_path: str, x0: int, y0: int, x1: int,
-                      photo_h: int, radius: int = 35) -> None:
-    """
-    Draws a user photo across the top of the content card, center-cropped to fill
-    the card width. Only the top corners are rounded so the photo sits flush
-    against the card body holding the copy underneath.
-    """
-    box_w = x1 - x0
-    photo = resize_to_cover(Image.open(photo_path).convert("RGB"), box_w, photo_h)
-
-    mask = Image.new("L", (box_w, photo_h), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    mask_draw.rounded_rectangle([0, 0, box_w - 1, photo_h - 1], radius=radius, fill=255)
-    # Square off the bottom corners: they meet the text area, not the card edge.
-    mask_draw.rectangle([0, photo_h - radius - 1, box_w - 1, photo_h - 1], fill=255)
-
-    image.paste(photo, (x0, y0), mask)
-
-
-def apply_dark_gradient(image: Image.Image, width: int, height: int, start_y: int,
-                        max_alpha: int, full_y: int = None) -> Image.Image:
-    """
-    Darkens an image from `start_y` downwards so white copy stays readable on top
-    of a photo. The overlay fades in linearly and reaches `max_alpha` at `full_y`
-    (the bottom edge by default), holding it from there down.
-    """
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    g_draw = ImageDraw.Draw(overlay)
-    span = max(1, (full_y or height) - start_y)
-    for y in range(start_y, height):
-        alpha = min(max_alpha, int(max_alpha * (y - start_y) / span))
-        g_draw.line([(0, y), (width, y)], fill=(10, 10, 15, alpha))
-    return Image.alpha_composite(image, overlay)
-
-
-# --- Newspaper cover ---
+# --- Newspaper layout ---
+# Every card is a newspaper page: off-white paper, a ruled "TODAY NEWS" header,
+# dark ink copy with marker strokes in the theme color, photos in a tinted box,
+# and a bottom rule carrying the brand logo.
 PAPER_COLOR = (240, 238, 233)
 PAPER_INK = (26, 26, 28)
+PAPER_BODY = (58, 58, 64)
 PAPER_HEADER_LEFT = "TODAY NEWS"
 PAPER_HEADER_RIGHT = "ALWAYS GOOD"
 PAPER_TITLE_MAX_LINES = 4
@@ -1128,7 +773,7 @@ def duotone_photo(photo: Image.Image, key_color: tuple) -> Image.Image:
 
 def draw_brush_highlight(image: Image.Image, x0: int, y0: int, x1: int, y1: int,
                          color: tuple, rng: random.Random) -> None:
-    """A rough marker stroke behind a headline line: jagged edges, streaky ends."""
+    """A rough marker stroke behind a line of copy: jagged edges, streaky ends."""
     layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
     l_draw = ImageDraw.Draw(layer)
     fill = color + (255,)
@@ -1141,8 +786,7 @@ def draw_brush_highlight(image: Image.Image, x0: int, y0: int, x1: int, y1: int,
     band = y1 - y0
     for _ in range(9):
         sy = y0 + rng.randint(0, band)
-        sh = rng.randint(2, 6)
-        l_draw.rectangle([x1, sy, x1 + rng.randint(8, 55), sy + sh], fill=fill)
+        l_draw.rectangle([x1, sy, x1 + rng.randint(8, 55), sy + rng.randint(2, 6)], fill=fill)
         sy = y0 + rng.randint(0, band)
         l_draw.rectangle([x0 - rng.randint(4, 26), sy, x0, sy + rng.randint(2, 6)], fill=fill)
 
@@ -1150,607 +794,404 @@ def draw_brush_highlight(image: Image.Image, x0: int, y0: int, x1: int, y1: int,
     image.alpha_composite(layer)
 
 
-def draw_swipe_arrow(draw: ImageDraw.ImageDraw, x: int, y_mid: int, size: int = 90) -> None:
-    """Outlined right-pointing arrow that sits on the bottom rule."""
-    h = size * 0.56
-    shaft = h * 0.42
-    head_x = x + size * 0.55
-    pts = [
-        (x, y_mid - shaft / 2), (head_x, y_mid - shaft / 2), (head_x, y_mid - h / 2),
-        (x + size, y_mid), (head_x, y_mid + h / 2), (head_x, y_mid + shaft / 2),
-        (x, y_mid + shaft / 2),
-    ]
-    draw.polygon(pts, fill=(252, 251, 248, 255), outline=PAPER_INK + (255,), width=4)
-    # Hatching in the shaft, like the hand-drawn arrow it imitates.
-    for i in range(1, 6):
-        hx = x + i * (head_x - x) / 6
-        draw.line([(hx, y_mid - shaft / 2 + 5), (hx, y_mid + shaft / 2 - 5)], fill=PAPER_INK + (255,), width=2)
+_LOGO_CACHE = {}
 
 
-def _title_highlight_spans(title: str) -> tuple:
+def ink_logo(size: int) -> Optional[Image.Image]:
+    """The brand logo (stored white-on-transparent) recolored to ink for paper."""
+    if size in _LOGO_CACHE:
+        return _LOGO_CACHE[size]
+    workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    logo_path = os.path.join(workspace_root, "img", "alwaysgood_logo.png")
+    try:
+        alpha = Image.open(logo_path).convert("RGBA").split()[3]
+    except Exception as e:
+        print(f"Failed to load the logo: {e}")
+        return None
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.ANTIALIAS
+    logo = Image.new("RGBA", alpha.size, PAPER_INK + (255,))
+    logo.putalpha(alpha)
+    logo = logo.resize((size, size), resample_filter)
+    _LOGO_CACHE[size] = logo
+    return logo
+
+
+def _highlight_marked(text: str) -> tuple:
     """
-    Strips '**' markers from the headline and returns (clean text, set of
-    character indices that were inside markers).
+    Strips '**' markers and returns (clean text, set of character indices that
+    were inside markers).
     """
     clean, marked, inside = [], set(), False
     i = 0
-    while i < len(title):
-        if title.startswith("**", i):
+    while i < len(text):
+        if text.startswith("**", i):
             inside = not inside
             i += 2
             continue
         if inside:
             marked.add(len(clean))
-        clean.append(title[i])
+        clean.append(text[i])
         i += 1
     return "".join(clean), marked
 
 
-def draw_paper_cover(slide: dict, hooking_title: str, cover_photo: Optional[Image.Image],
-                     article_title: str = None, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
-                     for_video: bool = False, cover_anchor: float = 0.5) -> Image.Image:
+def _ink_band(font, line_height: int) -> tuple:
+    """Top/bottom of the glyphs inside a line box, padded for a marker stroke."""
+    if hasattr(font, "getbbox"):
+        _, top, _, bottom = font.getbbox("가Ag")
+    else:
+        top, bottom = 0, line_height
+    pad = int(line_height * 0.09)
+    return top - pad, bottom + pad
+
+
+def _badge_text_color(key_color: tuple) -> tuple:
+    """White on dark theme colors, ink on light ones (yellow)."""
+    r, g, b = key_color[:3]
+    return PAPER_INK + (255,) if 0.299 * r + 0.587 * g + 0.114 * b > 170 else (255, 255, 255, 255)
+
+
+class PaperPage:
+    """One newspaper card being drawn: the frame plus helpers for its parts."""
+
+    def __init__(self, canvas: str, theme: str, seed: int):
+        spec = get_canvas(canvas)
+        self.W, self.H = spec["size"]
+        self.margin = spec["margin"]
+        self.p = spec["paper"]
+        self.key = get_theme(theme)["key"]
+        self.ink = PAPER_INK + (255,)
+        self.highlight = _mix(self.key, PAPER_COLOR, 0.78)
+        self.rng = random.Random(seed)
+        self.image = make_paper_background(self.W, self.H, seed).convert("RGBA")
+        # Wide canvases put the photo in a column beside the copy.
+        self.side_photo = self.p["photo_box"][0] >= self.margin + self.p["title_wrap"]
+
+    @property
+    def draw(self) -> ImageDraw.ImageDraw:
+        return ImageDraw.Draw(self.image)
+
+    def frame(self, page_text: Optional[str] = None) -> None:
+        """Header rules and labels, bottom rule, logo, optional page number."""
+        draw, p, m = self.draw, self.p, self.margin
+        x1 = self.W - m
+        h_top, h_bot = p["header_top"], p["header_top"] + p["header_h"]
+        draw.rectangle([m, h_top, x1, h_top + 2], fill=self.ink)
+        draw.rectangle([m, h_bot, x1, h_bot + 2], fill=self.ink)
+        header_font = get_system_font(p["header_font"], bold=True)
+        label_y = h_top + (p["header_h"] - p["header_font"]) // 2
+        draw.text((m, label_y), PAPER_HEADER_LEFT, fill=self.ink, font=header_font)
+        draw.text((x1 - _text_width(header_font, PAPER_HEADER_RIGHT), label_y),
+                  PAPER_HEADER_RIGHT, fill=self.ink, font=header_font)
+
+        rule_y = p["rule_y"]
+        draw.rectangle([m, rule_y, x1, rule_y + 2], fill=self.ink)
+        if page_text:
+            page_font = get_system_font(p["page_font"])
+            draw.text((m, rule_y + 20), page_text, fill=(110, 110, 116, 255), font=page_font)
+
+        # The logo sits on the right end of the rule, on a paper disc that
+        # breaks the line behind it.
+        size = p["logo"]
+        cx, cy = x1 - size // 2 + 8, rule_y + 1
+        r = size // 2 + 6
+        # Paper tone sampled just above the rule, so the disc blends into the grain.
+        disc = self.image.getpixel((cx - r - 4, max(0, cy - r - 4)))
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=disc)
+        logo = ink_logo(size)
+        if logo is not None:
+            self.image.alpha_composite(logo, (cx - size // 2, cy - size // 2))
+
+    def badge(self, text: str, x: int, y: int) -> None:
+        p = self.p
+        font = get_system_font(p["badge_font"], bold=True)
+        if hasattr(font, "getbbox"):
+            bbox = font.getbbox(text)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        else:
+            tw, th = len(text) * 11, p["badge_font"]
+        bh = p["badge_h"]
+        self.draw.rectangle([x, y, x + tw + 44, y + bh], fill=self.key)
+        self.draw.text((x + 22, y + (bh - th) // 2 - 2), text, fill=_badge_text_color(self.key), font=font)
+
+    def lines(self, rows: list, x: int, y: int, line_height: int) -> int:
+        """
+        Draws rows of (text, font, color, (start, end) | None); the span gets a
+        marker stroke behind it. Returns the y below the last row.
+        """
+        for text, font, color, span in rows:
+            if span:
+                band_top, band_bottom = _ink_band(font, line_height)
+                sx0 = x + (_text_width(font, text[:span[0]]) if span[0] else 0)
+                sx1 = x + _text_width(font, text[:span[1]])
+                draw_brush_highlight(self.image, sx0 - 14, y + band_top, sx1 + 14, y + band_bottom,
+                                     self.highlight, self.rng)
+            draw_text_safe(self.draw, (x, y), text, fill=color, font=font)
+            y += line_height
+        return y
+
+    def photo(self, photo: Image.Image, box: tuple, anchor: float = 0.5) -> None:
+        """The photo, tinted with the theme color, over an offset block of it."""
+        bx0, by0, bx1, by1 = box
+        off = self.p["shadow"]
+        self.draw.rectangle([bx0 + off, by0 + off, bx1 + off, by1 + off], fill=self.key)
+        fitted = resize_to_cover(photo, bx1 - bx0, by1 - by0, anchor)
+        self.image.paste(duotone_photo(fitted, self.key), (bx0, by0))
+
+
+def _headline_rows(title: str, steps, wrap: int, fits, default_last: bool) -> tuple:
     """
-    The carousel cover as a newspaper front page: ruled header ("TODAY NEWS"),
-    a left-aligned headline of at most four lines with one marker-highlighted
-    stretch, and the post's photo in a theme-tinted box near the bottom.
-    `cover_photo` is cropped to the box here, keeping the part at `cover_anchor`
-    (0 = top, 1 = bottom) of a photo taller than the box.
+    Wraps a headline at the largest step that keeps it to four lines and makes
+    `fits(line_count, step)` true; past the smallest step the fourth line ends
+    in an ellipsis. '**' words get a marker stroke; without any, the last line
+    does when `default_last` is set. Returns (rows, step).
     """
-    spec = get_canvas(canvas)
-    W, H = spec["size"]
-    margin = spec["margin"]
-    p = spec["paper"]
-    key_color = get_theme(theme)["key"]
-    ink = PAPER_INK + (255,)
-
-    title_raw = remove_emojis((slide.get("main_text") or "").strip())
-    if not title_raw:
-        title_raw = remove_emojis((article_title or hooking_title or "").strip())
-    title_raw = re.sub(r"\s+", " ", title_raw)
-    title, marked = _title_highlight_spans(title_raw)
-
-    seed = sum(ord(ch) for ch in title) or 1
-    rng = random.Random(seed)
-    image = make_paper_background(W, H, seed).convert("RGBA")
-    draw = ImageDraw.Draw(image)
-
-    # --- Header: rule, labels, rule ---
-    rule_x1 = W - margin
-    h_top, h_bot = p["header_top"], p["header_top"] + p["header_h"]
-    draw.rectangle([margin, h_top, rule_x1, h_top + 2], fill=ink)
-    draw.rectangle([margin, h_bot, rule_x1, h_bot + 2], fill=ink)
-    header_font = get_system_font(p["header_font"], bold=True)
-    label_y = h_top + (p["header_h"] - p["header_font"]) // 2
-    draw.text((margin, label_y), PAPER_HEADER_LEFT, fill=ink, font=header_font)
-    draw.text((rule_x1 - _text_width(header_font, PAPER_HEADER_RIGHT), label_y),
-              PAPER_HEADER_RIGHT, fill=ink, font=header_font)
-
-    # --- Headline: largest size that fits in four lines ---
-    sub_font = get_system_font(p["sub_font"])
-    sub_font_bold = get_system_font(p["sub_font"], bold=True)
-    sub_lines = []
-    for logical in cover_sub_lines(slide.get("sub_text")):
-        clean, has_highlight = strip_highlight_markers(logical)
-        line_font = sub_font_bold if has_highlight else sub_font
-        for piece in wrap_text(clean, line_font, p["sub_wrap"]):
-            sub_lines.append((piece, line_font))
-
-    def sub_height(count: int) -> int:
-        return p["sub_gap"] + count * p["sub_line"] if count else 0
-
-    title_zone = p["title_bottom"] - p["title_top"]
-    for font_size, line_height in p["title_steps"]:
-        title_font = get_system_font(font_size, bold=True)
-        lines = wrap_text(title, title_font, p["title_wrap"])
-        if len(lines) <= PAPER_TITLE_MAX_LINES and \
-                len(lines) * line_height + sub_height(len(sub_lines)) <= title_zone:
+    title, marked = _highlight_marked(re.sub(r"\s+", " ", title))
+    for step in steps:
+        font = get_system_font(step[0], bold=True)
+        lines = wrap_text(title, font, wrap)
+        if len(lines) <= PAPER_TITLE_MAX_LINES and fits(len(lines), step):
             break
     if len(lines) > PAPER_TITLE_MAX_LINES:
         lines = lines[:PAPER_TITLE_MAX_LINES]
         last = lines[-1]
-        while last and _text_width(title_font, last + "…") > p["title_wrap"]:
+        while last and _text_width(font, last + "…") > wrap:
             last = last[:-1]
         lines[-1] = last.rstrip() + "…"
-    while sub_lines and len(lines) * line_height + sub_height(len(sub_lines)) > title_zone:
-        sub_lines.pop()
 
-    # Which stretch of each line gets the marker stroke: the '**' words when the
-    # headline has them, otherwise the whole last line.
-    highlight_color = _mix(key_color, PAPER_COLOR, 0.78)
-    pad_x, cursor = 14, 0
-    spans = []
+    rows, cursor = [], 0
     for idx, line in enumerate(lines):
-        pos = title.find(line.rstrip("…"), cursor)
         span = None
+        pos = title.find(line.rstrip("…"), cursor)
         if marked and pos >= 0:
             hits = [i for i in range(len(line)) if pos + i in marked and line[i] != " "]
             if hits:
                 span = (hits[0], hits[-1] + 1)
             cursor = pos + len(line)
-        elif not marked and idx == len(lines) - 1:
+        elif not marked and default_last and idx == len(lines) - 1:
             span = (0, len(line))
-        spans.append(span)
-
-    y = p["title_top"]
-    # Stroke spans the glyphs' real ink height (fonts sit at different offsets).
-    if hasattr(title_font, "getbbox"):
-        _, ink_top, _, ink_bottom = title_font.getbbox("가Ag")
-    else:
-        ink_top, ink_bottom = 0, line_height
-    ink_pad = int(line_height * 0.09)
-    for line, span in zip(lines, spans):
-        if span:
-            sx0 = margin + _text_width(title_font, line[:span[0]]) if span[0] else margin
-            sx1 = margin + _text_width(title_font, line[:span[1]])
-            draw_brush_highlight(image, sx0 - pad_x, y + ink_top - ink_pad, sx1 + pad_x,
-                                 y + ink_bottom + ink_pad, highlight_color, rng)
-            draw = ImageDraw.Draw(image)
-        draw_text_safe(draw, (margin, y), line, fill=ink, font=title_font)
-        y += line_height
-
-    if sub_lines:
-        y += p["sub_gap"]
-        for text, line_font in sub_lines:
-            draw_text_safe(draw, (margin, y), text, fill=(70, 70, 74, 255), font=line_font)
-            y += p["sub_line"]
-
-    # --- Photo box with an offset block of the theme color behind it ---
-    # A short headline leaves room, so the box grows upward to meet it.
-    bx0, by0, bx1, by1 = p["photo_box"]
-    if bx0 < p["title_wrap"] + margin:  # box sits under the headline, not beside it
-        by0 = min(by0, max(p["photo_top_min"], y + 60))
-    off = p["shadow"]
-    draw.rectangle([bx0 + off, by0 + off, bx1 + off, by1 + off], fill=key_color)
-    if cover_photo is not None:
-        box_photo = resize_to_cover(cover_photo, bx1 - bx0, by1 - by0, cover_anchor)
-        image.paste(duotone_photo(box_photo, key_color), (bx0, by0))
-    else:
-        draw.rectangle([bx0, by0, bx1, by1], fill=_mix(key_color, PAPER_COLOR, 0.55))
-    draw = ImageDraw.Draw(image)
-
-    # --- Bottom rule, with the swipe arrow on the carousel ---
-    draw.rectangle([margin, p["rule_y"], rule_x1, p["rule_y"] + 2], fill=ink)
-    if not for_video:
-        draw_swipe_arrow(draw, rule_x1 - 62, p["rule_y"] + 1)
-
-    return image
+        rows.append((line, font, PAPER_INK + (255,), span))
+    return rows, step
 
 
-def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS, for_video: bool = False,
-                     style: Optional[dict] = None, cover_photo: Optional[Image.Image] = None,
-                     cover_anchor: float = 0.5) -> Image.Image:
+def _copy_rows(logical_lines: list, size: int, wrap: int, header_bold: bool = False) -> list:
     """
-    Generates a single image slide based on its content and type.
-    Uses a premium glassmorphic card news layout structure for content/CTA,
-    and a bold bottom-gradient layout for the cover to make the title pop.
-    The accent/key color and gradient fallback are driven by the chosen theme.
-    `canvas` picks the shape: "portrait" (4:5 Instagram) or "landscape" (16:9
-    YouTube); the layout numbers for each live in CANVASES. `for_video` marks a
-    card that will end up in a video rather than in the swipeable carousel, which
-    swaps the cover's swipe prompt for the brand sign-off. `style` is the
-    post's look (see STYLE_OPTIONS). The carousel cover is drawn as a newspaper
-    page by draw_paper_cover, with `cover_photo` in its photo box.
+    Body copy rows. A line wrapped in '**' is the one to remember: bold with a
+    marker stroke. Numbered lead-ins ("1.", "첫째") are bold ink when
+    `header_bold` is set; everything else is regular body gray.
+    """
+    regular = get_system_font(size)
+    bold = get_system_font(size, bold=True)
+    rows = []
+    for logical in logical_lines:
+        if not logical.strip():
+            continue
+        clean, has_highlight = strip_highlight_markers(logical)
+        clean = clean.strip()
+        is_header = header_bold and bool(
+            re.match(r'^\d+[\.\)]', clean)
+            or re.match(r'^\d+단계', clean)
+            or clean.startswith(("첫째", "둘째", "셋째", "넷째", "다섯째",
+                                 "여섯째", "일곱째", "여덟째", "마지막"))
+        )
+        font = bold if (has_highlight or is_header) else regular
+        color = PAPER_INK + (255,) if (has_highlight or is_header) else PAPER_BODY + (255,)
+        for piece in wrap_text(clean, font, wrap):
+            rows.append((piece, font, color, (0, len(piece)) if has_highlight else None))
+    return rows
+
+
+def _title_seed(text: str) -> int:
+    return sum(ord(ch) for ch in (text or "")) or 1
+
+
+def draw_paper_cover(slide: dict, hooking_title: str, photo: Optional[Image.Image],
+                     article_title: str = None, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
+                     photo_anchor: float = 0.5) -> Image.Image:
+    """
+    The carousel cover: a left-aligned headline of at most four lines with one
+    marker-highlighted stretch, optional sub-copy, and the post's photo in a box
+    that grows up to meet the headline.
+    """
+    title = remove_emojis((slide.get("main_text") or "").strip())
+    if not title:
+        title = remove_emojis((article_title or hooking_title or "").strip())
+    page = PaperPage(canvas, theme, _title_seed(title))
+    p, m = page.p, page.margin
+    page.frame()
+
+    sub_rows = []
+    sub_font = get_system_font(p["sub_font"])
+    sub_font_bold = get_system_font(p["sub_font"], bold=True)
+    for logical in cover_sub_lines(slide.get("sub_text")):
+        clean, has_highlight = strip_highlight_markers(logical)
+        font = sub_font_bold if has_highlight else sub_font
+        for piece in wrap_text(clean, font, p["sub_wrap"]):
+            sub_rows.append((piece, font, (70, 70, 74, 255), None))
+
+    def sub_height(count: int) -> int:
+        return p["sub_gap"] + count * p["sub_line"] if count else 0
+
+    zone = p["title_bottom"] - p["title_top"]
+    rows, (_, line_height) = _headline_rows(
+        title, p["title_steps"], p["title_wrap"],
+        lambda n, step: n * step[1] + sub_height(len(sub_rows)) <= zone, default_last=True)
+    while sub_rows and len(rows) * line_height + sub_height(len(sub_rows)) > zone:
+        sub_rows.pop()
+
+    y = page.lines(rows, m, p["title_top"], line_height)
+    if sub_rows:
+        y = page.lines(sub_rows, m, y + p["sub_gap"], p["sub_line"])
+
+    bx0, by0, bx1, by1 = p["photo_box"]
+    if not page.side_photo:
+        by0 = min(by0, max(p["photo_top_min"], y + 60))
+    if photo is not None:
+        page.photo(photo, (bx0, by0, bx1, by1), photo_anchor)
+    else:
+        page.draw.rectangle([bx0, by0, bx1, by1], fill=_mix(page.key, PAPER_COLOR, 0.55))
+    return page.image
+
+
+def draw_paper_card(slide: dict, total_pages: int, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
+                    photo_path: Optional[str] = None) -> Image.Image:
+    """
+    Cards 2..N: a "KEY POINT" (or "THANK YOU") label, then the copy in ink. A
+    photo the user put on this card sits in a box under the label (beside the
+    copy on wide canvases) and the copy shrinks to make room.
+    """
+    slide_type = slide.get("type", "content")
+    page_num = slide.get("page", 1)
+    main_text = remove_emojis(slide.get("main_text", "") or "")
+    page = PaperPage(canvas, theme, _title_seed(main_text) + page_num)
+    p, m, W = page.p, page.margin, page.W
+    page.frame(f"{page_num} / {total_pages}" if total_pages > 1 else None)
+
+    has_photo = photo_path is not None
+    side = has_photo and page.side_photo
+    wrap = p["title_wrap"] if side else p["card_wrap"]
+
+    if slide_type == "cta":
+        badge_text = "THANK YOU"
+        size, line_height = p["cta_photo"] if has_photo else p["cta"]
+        font = get_system_font(size, bold=True)
+        clean, _ = strip_highlight_markers(main_text)
+        rows = [(line, font, page.ink, None) for line in wrap_text(clean, font, wrap)]
+    else:
+        badge_text = f"KEY POINT {page_num - 1:02d}"
+        size, line_height = p["body_photo"] if has_photo else p["body"]
+        rows = _copy_rows(format_korean_line_breaks(main_text).split("\n"), size, wrap, header_bold=True)
+
+    y = p["body_top"]
+    page.badge(badge_text, m, y)
+    y += p["badge_h"] + p["badge_gap"]
+    bottom = p["body_bottom"]
+
+    if has_photo:
+        photo = Image.open(photo_path).convert("RGB")
+        if side:
+            page.photo(photo, p["photo_box"])
+        else:
+            off = p["shadow"]
+            text_h = len(rows) * line_height
+            photo_h = max(p["photo_min"], min(bottom - y - off - p["photo_gap"] - text_h, p["photo_max"]))
+            page.photo(photo, (m, y, W - m, y + photo_h))
+            y += photo_h + off + p["photo_gap"]
+
+    # Squeeze the leading when the copy is long; center it when there is room
+    # (but keep it under the photo when there is one).
+    area = bottom - y
+    if rows and len(rows) * line_height > area:
+        line_height = max(p["min_line"], area // len(rows))
+    if not has_photo or side:
+        y += max(0, (area - len(rows) * line_height) // 2)
+    page.lines(rows, m, y, line_height)
+    return page.image
+
+
+def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
+                      article_title: str = None, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
+                      photo_anchor: float = 0.5) -> Image.Image:
+    """
+    The one-card post: "오늘의 한 장" label, a headline of up to four lines, the
+    photo box, and the body block (up to five lines, one highlighted) at the
+    bottom. Wide canvases put the photo in a column beside the copy.
+    """
+    headline = remove_emojis((slide.get("main_text") or "").strip())
+    if not headline:
+        headline = remove_emojis((article_title or hooking_title or "").strip())
+    page = PaperPage(canvas, theme, _title_seed(headline))
+    p, m = page.p, page.margin
+    page.frame()
+
+    body_text = remove_emojis((slide.get("sub_text") or "").strip())
+    body_logical = [line for line in body_text.split("\n") if line.strip()][:SINGLE_BODY_MAX_LINES]
+
+    y = p["body_top"]
+    page.badge("오늘의 한 장", m, y)
+    y += p["badge_h"] + p["badge_gap"]
+    bottom = p["body_bottom"]
+    title_gap, photo_gap = 36, p["photo_gap"]
+    in_column = photo is not None and not page.side_photo
+    photo_room = p["single_photo_min"] + p["shadow"] + photo_gap if in_column else 0
+    wrap = p["title_wrap"] if page.side_photo else p["card_wrap"]
+
+    def fits(count: int, step) -> bool:
+        body_rows = _copy_rows(body_logical, step[2], wrap)
+        return y + count * step[1] + title_gap + photo_room + len(body_rows) * step[3] <= bottom
+
+    rows, step = _headline_rows(headline, p["single_steps"], wrap, fits, default_last=False)
+    body_rows = _copy_rows(body_logical, step[2], wrap)
+    y = page.lines(rows, m, y, step[1]) + title_gap
+
+    if in_column:
+        # Body anchored to the bottom; the photo takes everything in between.
+        body_y = max(y + photo_room, bottom - len(body_rows) * step[3])
+        page.photo(photo, (m, y, page.W - m, body_y - photo_gap - p["shadow"]), photo_anchor)
+        page.lines(body_rows, m, body_y, step[3])
+    else:
+        if photo is not None:
+            page.photo(photo, p["photo_box"], photo_anchor)
+        page.lines(body_rows, m, y, step[3])
+    return page.image
+
+
+def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_title: str = None,
+                     theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS,
+                     post_photo: Optional[Image.Image] = None,
+                     photo_anchor: float = 0.5) -> Image.Image:
+    """
+    Draws one card as a newspaper page. `canvas` picks the shape ("portrait"
+    4:5 Instagram, "landscape" 16:9 YouTube, "story" 9:16 Shorts). `post_photo`
+    is the post's photo (the user's upload or the AI background) shown on the
+    cover and the one-card post; a photo the user put on a content card is
+    looked up in `photo_dir`.
     """
     slide_type = slide.get("type", "content")
     if slide_type == "cover":
-        return draw_paper_cover(slide, hooking_title, cover_photo, article_title=article_title,
-                                theme=theme, canvas=canvas, for_video=for_video, cover_anchor=cover_anchor)
-    look = get_style(style)
-    centered = look["cover_align"] == "center"
-    theme_data = get_theme(theme)
-    key_color = theme_data["key"]  # theme accent color
-
-    spec = get_canvas(canvas)
-    W, H = spec["size"]
-    margin = spec["margin"]
-    cover_spec = spec["cover"]
-    card_spec = spec["card"]
-
-    # The cover and the one-card post both write straight onto the photo, so they
-    # keep it crisp and darken it from a gradient instead of blurring it.
-    full_bleed = slide_type in ("cover", "single")
-    single_spec = spec["single"]
-
-    if bg_image is not None:
-        # We make a copy of the pre-resized cover image
-        image = bg_image.copy()
-
-        # Ensure RGBA mode
-        if image.mode != "RGBA":
-            image = image.convert("RGBA")
-
-        if not full_bleed:
-            # Light blur on content slides: enough to keep the copy card readable
-            # while the photo behind it stays recognizable (a 15px blur turned it
-            # into an unreadable smear).
-            image = image.filter(ImageFilter.GaussianBlur(7))
-            # Draw standard transparent overlay for content slides
-            overlay = Image.new("RGBA", (W, H), (10, 10, 15, 70)) # ~27% opacity
-            image = Image.alpha_composite(image, overlay)
-        elif slide_type == "single":
-            image = apply_dark_gradient(image, W, H, single_spec["grad_start"],
-                                        single_spec["grad_alpha"], single_spec["grad_full"])
-        else:
-            # For Cover Slide: Crisp background with bottom-up dark gradient shadow
-            image = apply_dark_gradient(image, W, H, cover_spec["grad_start"], 240)
-    else:
-        # Fallback to premium gradient (theme-tinted) if bg_image is None
-        color_start = theme_data["grad_start"]
-        color_end = theme_data["grad_end"]
-        image = draw_gradient_background(W, H, color_start, color_end)
-        if image.mode != "RGBA":
-            image = image.convert("RGBA")
-
-        # Still apply the bottom gradient overlay for consistency on fallback
-        if slide_type == "single":
-            image = apply_dark_gradient(image, W, H, single_spec["grad_start"],
-                                        single_spec["grad_alpha"], single_spec["grad_full"])
-        elif slide_type == "cover":
-            image = apply_dark_gradient(image, W, H, cover_spec["grad_start"], 220)
-
-    draw = ImageDraw.Draw(image)
-
-    # Bottom key color brand accent bar (drawn on all pages)
-    bar_top, bar_bottom = spec["bar_from_bottom"]
-    draw.rectangle([margin, H - bar_top, W - margin, H - bar_bottom], fill=key_color)
-
-    # Page indicator, centered at the bottom of every card just above the accent
-    # bar. It sits outside the content card, so drawing it here (before the card
-    # is composited on top) is safe for every slide type. A one-card post has no
-    # pages to count, so it is skipped there.
-    page_num = slide.get("page", 1)
-    if total_pages > 1:
-        page_text = f"{page_num} / {total_pages}"
-        page_font = get_system_font(spec["page_font"])
-        page_w = _text_width(page_font, page_text)
-        draw.text(((W - page_w) // 2, H - spec["page_from_bottom"]), page_text,
-                  fill=(180, 180, 180, 220), font=page_font)
-
-    if slide_type == "cover":
-        # Cover Page Layout (No card, text drawn directly on bottom gradient)
-
-        # Draw cover top badge
-        bx0, by0, bx1, by1 = cover_spec["badge_box"]
-        if centered:
-            bx0, bx1 = (W - (bx1 - bx0)) // 2, (W + (bx1 - bx0)) // 2
-        draw.rounded_rectangle([bx0, by0, bx1, by1], radius=15, fill=key_color)
-        badge_font = get_system_font(cover_spec["badge_font"])
-        draw.text((bx0 + 30, by0 + 10), "TRENDING INSIGHT", fill=(255, 255, 255, 255), font=badge_font)
-        
-        # Draw Main Title (Bold & Large)
-        # Prefer the AI-generated cover hook (punchy, engaging) over the raw
-        # scraped article title. Fall back to the article/hooking title only
-        # when the cover copy is missing (e.g. legacy plans).
-        title_text = (slide.get("main_text") or "").strip()
-        if not title_text:
-            title_text = (article_title or hooking_title or "").strip()
-
-        title_text, _ = strip_highlight_markers(title_text)
-        title_text = remove_emojis(title_text)
-        # The cover title keeps its commas inline: a headline reads as one
-        # sentence, so only the width of the card decides where it wraps.
-
-        # Sub-copy under the title: up to three lines the user types in the
-        # dashboard. A freshly generated post has none, so a cover without
-        # sub-copy is drawn exactly as before.
-        sub_font = get_system_font(cover_spec["sub_font"])
-        sub_font_bold = get_system_font(cover_spec["sub_font"], bold=True)
-        sub_line_h = cover_spec["sub_line"]
-        sub_gap = cover_spec["sub_gap"]
-
-        # Each typed line carries its own '**highlight**' state and may still
-        # wrap if it runs wider than the card.
-        sub_lines = []
-        for logical in cover_sub_lines(slide.get("sub_text")):
-            clean, has_highlight = strip_highlight_markers(logical)
-            line_font = sub_font_bold if has_highlight else sub_font
-            line_color = key_color if has_highlight else (226, 228, 234, 255)
-            for piece in wrap_text(clean, line_font, cover_spec["sub_wrap"]):
-                sub_lines.append((piece, line_font, line_color))
-
-        def sub_block_height(count: int) -> int:
-            return sub_gap + count * sub_line_h if count else 0
-
-        # Fit the hook: start at a large size and step down if it wraps to many
-        # lines, so the title never overflows into the teaser instead of being
-        # hard-truncated with an ellipsis. The sub-copy shares that budget, so a
-        # cover carrying one gets a slightly smaller title.
-        y_start = cover_spec["title_top"]
-        teaser_top = H - cover_spec["teaser_clear"]  # keep clear of the bottom teaser text
-        title_font = None
-        lines = []
-        for font_size, line_height in cover_spec["title_steps"]:
-            title_font = get_system_font(font_size, bold=True)
-            lines = wrap_text(title_text, title_font, cover_spec["title_wrap"])
-            if y_start + len(lines) * line_height + sub_block_height(len(sub_lines)) <= teaser_top:
-                break
-
-        # Both blocks long even at the smallest step: drop sub-copy lines from
-        # the end rather than letting the text run over the teaser.
-        while sub_lines and y_start + len(lines) * line_height + sub_block_height(len(sub_lines)) > teaser_top:
-            sub_lines.pop()
-
-        y_cursor = y_start
-        for line in lines:
-            x = (W - _text_width(title_font, line)) // 2 if centered else margin
-            # Draw a subtle drop shadow (semi-transparent dark gray) at (3, 3) offset
-            draw_text_safe(draw, (x + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font, stroke_width=0)
-            # Set stroke_width to 0 for maximum clarity, avoiding fat/bloated rendering
-            draw_text_safe(draw, (x, y_cursor), line, fill=(255, 255, 255, 255), font=title_font, stroke_width=0)
-            y_cursor += line_height
-
-        if sub_lines:
-            y_cursor += sub_gap
-            for text, line_font, line_color in sub_lines:
-                x = (W - _text_width(line_font, text)) // 2 if centered else margin
-                draw_text_safe(draw, (x + 2, y_cursor + 2), text, fill=(10, 10, 15, 190), font=line_font)
-                draw_text_safe(draw, (x, y_cursor), text, fill=line_color, font=line_font)
-                y_cursor += sub_line_h
-
-        # Draw teaser text at the bottom. The logo moved to the top-left corner,
-        # so the teaser reclaims the full-width left margin used by the title.
-        teaser_text = cover_spec["teaser_text"]
-        if for_video:
-            teaser_text = cover_spec.get("teaser_text_video", teaser_text)
-        teaser_font = get_system_font(cover_spec["teaser_font"])
-        teaser_x = (W - _text_width(teaser_font, teaser_text)) // 2 if centered else margin
-        draw.text((teaser_x, H - cover_spec["teaser_from_bottom"]), teaser_text, fill=key_color, font=teaser_font)
-
-    elif slide_type == "single":
-        # One-card post: the whole story lives on this single image, so the
-        # headline (main_text) is followed by a short body block (sub_text)
-        # instead of continuing onto a next card.
-        headline = (slide.get("main_text") or "").strip()
-        if not headline:
-            headline = (article_title or hooking_title or "").strip()
-        headline, _ = strip_highlight_markers(headline)
-        headline = remove_emojis(headline)
-        # Same as the cover: the headline wraps on width alone, not on commas.
-
-        # The body keeps its commas inline: a sentence reads as one thought,
-        # so only the width of the card decides where it wraps.
-        body_text = remove_emojis((slide.get("sub_text") or "").strip())
-        # Three to five typed lines carry the story. Anything past the cap is
-        # dropped rather than allowed to push the block up over the photo.
-        body_logical = [line for line in body_text.split("\n") if line.strip()][:SINGLE_BODY_MAX_LINES]
-
-        badge_h = single_spec["badge_h"]
-        block_bottom = H - single_spec["block_bottom"]
-        block_top_min = single_spec["block_top_min"]
-
-        # Step the type down until headline + body fit above the sign-off line;
-        # the smallest step is the floor, so very long copy just gets tighter.
-        for title_size, title_line, body_size, body_line in single_spec["steps"]:
-            title_font = get_system_font(title_size, bold=True)
-            body_font = get_system_font(body_size)
-            body_font_bold = get_system_font(body_size, bold=True)
-
-            title_lines = wrap_text(headline, title_font, single_spec["title_wrap"])
-
-            # One line of the body is wrapped in **...**: that is the sentence the
-            # reader should remember, so it gets the theme's key color.
-            body_lines = []
-            for logical in body_logical:
-                clean, has_highlight = strip_highlight_markers(logical)
-                line_font = body_font_bold if has_highlight else body_font
-                line_color = key_color if has_highlight else (226, 228, 234, 255)
-                for sub in wrap_text(clean.strip(), line_font, single_spec["body_wrap"]):
-                    body_lines.append((sub, line_font, line_color))
-
-            block_height = badge_h + single_spec["badge_gap"] + len(title_lines) * title_line
-            if body_lines:
-                block_height += single_spec["title_body_gap"] + len(body_lines) * body_line
-            if block_bottom - block_height >= block_top_min:
-                break
-
-        # Anchor the block to the bottom, growing upwards as the copy gets longer.
-        y_cursor = max(block_top_min, block_bottom - block_height)
-
-        # Badge pill, left aligned with the copy below it
-        badge_text = single_spec["badge_text"]
-        badge_font = get_system_font(single_spec["badge_font"], bold=True)
-        if hasattr(badge_font, "getbbox"):
-            bbox = badge_font.getbbox(badge_text)
-            badge_text_w, badge_text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        else:
-            badge_text_w, badge_text_h = len(badge_text) * 11, single_spec["badge_font"]
-        badge_x = (W - badge_text_w - 60) // 2 if centered else margin
-        draw.rounded_rectangle([badge_x, y_cursor, badge_x + badge_text_w + 60, y_cursor + badge_h],
-                               radius=15, fill=key_color)
-        draw.text((badge_x + 30, y_cursor + (badge_h - badge_text_h) // 2 - 2), badge_text,
-                  fill=(255, 255, 255, 255), font=badge_font)
-        y_cursor += badge_h + single_spec["badge_gap"]
-
-        for line in title_lines:
-            x = (W - _text_width(title_font, line)) // 2 if centered else margin
-            draw_text_safe(draw, (x + 3, y_cursor + 3), line, fill=(10, 10, 15, 200), font=title_font)
-            draw_text_safe(draw, (x, y_cursor), line, fill=(255, 255, 255, 255), font=title_font)
-            y_cursor += title_line
-
-        if body_lines:
-            y_cursor += single_spec["title_body_gap"]
-            for text, line_font, line_color in body_lines:
-                x = (W - _text_width(line_font, text)) // 2 if centered else margin
-                draw_text_safe(draw, (x + 2, y_cursor + 2), text, fill=(10, 10, 15, 170), font=line_font)
-                draw_text_safe(draw, (x, y_cursor), text, fill=line_color, font=line_font)
-                y_cursor += body_line
-
-        # No next card to tease, so the card signs off with the brand name.
-        sign_font = get_system_font(single_spec["sign_font"])
-        sign_text = single_spec["sign_text"]
-        sign_x = (W - _text_width(sign_font, sign_text)) // 2 if centered else margin
-        draw.text((sign_x, H - single_spec["sign_from_bottom"]), sign_text,
-                  fill=key_color, font=sign_font)
-
-    else:
-        # Define layout dimensions for content/CTA cards
-        card_x0, card_y0, card_x1, card_y1 = card_spec["box"]
-
-        # Create card overlay layer for premium glassmorphism
-        card_overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        card_draw = ImageDraw.Draw(card_overlay)
-        
-        # Choose card fill and border color based on slide type
-        if slide_type == "cta":
-            card_fill = (12, 12, 20, 215)  # Slightly higher opacity for final slide contrast
-            card_border = (key_color[0], key_color[1], key_color[2], 90)  # Subtle themed highlight border
-        else:
-            card_fill = (12, 12, 20, 210)  # ~82% opacity
-            card_border = (255, 255, 255, 40)
-        card_radius, border_width = 35, 2
-        if look["card"] == "tint":
-            # Dark card washed with the theme color, sharper corners.
-            card_fill = (12 + key_color[0] // 7, 12 + key_color[1] // 7, 20 + key_color[2] // 7, 218)
-            card_border = (key_color[0], key_color[1], key_color[2], 110)
-            card_radius = 18
-        elif look["card"] == "outline":
-            # See-through card with a bold theme-colored frame.
-            card_fill = (8, 8, 14, 185)
-            card_border = (key_color[0], key_color[1], key_color[2], 230)
-            card_radius, border_width = 6, 4
-
-        card_draw.rounded_rectangle(
-            [card_x0, card_y0, card_x1, card_y1],
-            radius=card_radius,
-            fill=card_fill,
-            outline=card_border,
-            width=border_width
-        )
-        
-        # Alpha composite the card onto the main background
-        image = Image.alpha_composite(image, card_overlay)
-        draw = ImageDraw.Draw(image)
-
-        # A user-inserted photo, when present, fills the top of the card and the
-        # copy shrinks and moves underneath it. Without one the layout is
-        # unchanged: badge at the top of the card, copy centered in the body.
-        photo_path = resolve_user_photo(slide, photo_dir)
-        has_photo = photo_path is not None
-
-        # --- Build the text lines first: the photo gets whatever vertical room
-        #     the copy leaves over, so long copy is never squeezed out.
-        # Type scale for cards 2..N. These are deliberately smaller than the
-        # cover: the cover has one short hook, while these cards carry several
-        # sentences, so smaller copy leaves more breathing room inside the card.
-        if slide_type == "cta":
-            badge_text = "THANK YOU"
-            content_font_bold = get_system_font(
-                card_spec["cta_photo"] if has_photo else card_spec["cta"], bold=True)
-            line_height = card_spec["cta_line_photo"] if has_photo else card_spec["cta_line"]
-            main_text = slide.get("main_text", "")
-            main_text, _ = strip_highlight_markers(main_text)
-            main_text = remove_emojis(main_text)
-            render_lines = [(line, content_font_bold, key_color)
-                            for line in wrap_text(main_text, content_font_bold, card_spec["wrap"])]
-        else:
-            badge_text = f"KEY POINT 0{page_num - 1}" if page_num < 10 else f"KEY POINT {page_num - 1}"
-            body_size = card_spec["body_photo"] if has_photo else card_spec["body"]
-            content_font = get_system_font(body_size)
-            content_font_bold = get_system_font(body_size, bold=True)
-            line_height = card_spec["line_photo"] if has_photo else card_spec["line"]
-            main_text = slide.get("main_text", "")
-            main_text = remove_emojis(main_text)
-            main_text = format_korean_line_breaks(main_text)
-
-            # Visual hierarchy for a clean, premium look:
-            #  - Header line (e.g. "1. 소제목")  -> bold, near-white
-            #  - Emphasized sentence (**...**)   -> bold, theme key color (the one pop of color)
-            #  - Body text                        -> regular, light gray
-            header_color = (250, 250, 252, 255)
-            body_color = (226, 228, 234, 255)
-
-            render_lines = []  # (text, font, color) after width-wrapping
-            for logical in main_text.split("\n"):
-                if not logical.strip():
-                    continue
-                clean, has_highlight = strip_highlight_markers(logical)
-                cleaned = clean.strip()
-                is_header = bool(
-                    re.match(r'^\d+[\.\)]', cleaned)
-                    or re.match(r'^\d+단계', cleaned)
-                    or cleaned.startswith(("첫째", "둘째", "셋째", "넷째", "다섯째",
-                                            "여섯째", "일곱째", "여덟째", "마지막"))
-                )
-                if is_header:
-                    line_font, line_color = content_font_bold, header_color
-                elif has_highlight:
-                    line_font, line_color = content_font_bold, key_color
-                else:
-                    line_font, line_color = content_font, body_color
-
-                for sub in wrap_text(clean, line_font, card_spec["wrap"]):
-                    render_lines.append((sub, line_font, line_color))
-
-        # --- Place the photo, then the badge row, then the copy ---
-        BADGE_H = card_spec["badge_h"]
-        badge_top = card_spec["badge_top"]   # default badge row, just inside the card top
-        text_top = card_spec["text_top"]     # default copy start
-
-        if has_photo:
-            # Reserve badge row + gap + copy + bottom padding; the photo takes the rest.
-            text_block = BADGE_H + 35 + len(render_lines) * line_height + 30
-            photo_h = max(card_spec["photo_min"],
-                          min((card_y1 - card_y0) - text_block, card_spec["photo_max"]))
-            paste_slide_photo(image, photo_path, card_x0, card_y0, card_x1, photo_h)
-            draw = ImageDraw.Draw(image)
-            badge_top = card_y0 + photo_h + 30
-            text_top = badge_top + BADGE_H + 35
-
-        # Draw the badge pill (centered)
-        badge_font = get_system_font(22, bold=True)
-        if hasattr(badge_font, "getbbox"):
-            bbox = badge_font.getbbox(badge_text)
-            text_w = bbox[2] - bbox[0]
-            text_h = bbox[3] - bbox[1]
-        else:
-            text_w = len(badge_text) * 11
-            text_h = 22
-        box_w = text_w + 60
-        x0 = (W - box_w) // 2
-        x1 = x0 + box_w
-        y0, y1 = badge_top, badge_top + BADGE_H
-
-        draw.rounded_rectangle([x0, y0, x1, y1], radius=15, fill=key_color)
-        text_x = x0 + (box_w - text_w) // 2
-        text_y = y0 + (y1 - y0 - text_h) // 2 - 2
-        draw.text((text_x, text_y), badge_text, fill=(255, 255, 255, 255), font=badge_font)
-
-        # Center the copy in the remaining card body, compressing line height if
-        # there are many lines so the text never overflows the card.
-        card_content_height = card_y1 - text_top
-        if render_lines and len(render_lines) * line_height > card_content_height:
-            min_line = card_spec["min_line_photo"] if has_photo else card_spec["min_line"]
-            line_height = max(min_line, card_content_height // len(render_lines))
-
-        total_text_height = len(render_lines) * line_height
-        y_cursor = text_top + max(0, (card_content_height - total_text_height) // 2)
-
-        # Left-aligned copy starts where the wrap width begins, so the block
-        # stays centered in the card as a whole.
-        left_x = card_x0 + ((card_x1 - card_x0) - card_spec["wrap"]) // 2
-        for text, line_font, line_color in render_lines:
-            w = _text_width(line_font, text)
-            x_pos = left_x if look["text_align"] == "left" else (W - w) // 2
-            draw_text_safe(draw, (x_pos, y_cursor), text, fill=line_color, font=line_font)
-            y_cursor += line_height
+        return draw_paper_cover(slide, hooking_title, post_photo, article_title=article_title,
+                                theme=theme, canvas=canvas, photo_anchor=photo_anchor)
+    if slide_type == "single":
+        return draw_paper_single(slide, hooking_title, post_photo, article_title=article_title,
+                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor)
+    return draw_paper_card(slide, total_pages, theme=theme, canvas=canvas,
+                           photo_path=resolve_user_photo(slide, photo_dir))
 
 
-    # Apply logo watermark to the top-left corner (outside the card)
-    draw_logo_watermark(image, pos=spec["watermark_pos"], target_width=spec["watermark_width"])
-
-    return image
 
 def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None,
                              allow_paid_background: bool = True, canvas: str = DEFAULT_CANVAS,
-                             filename_prefix: str = "slide", for_video: bool = False) -> list:
+                             filename_prefix: str = "slide") -> list:
     """
     Generates all slide images based on the plan and saves them to output_dir.
     Returns a list of generated file paths.
 
     `canvas` selects the card shape ("portrait" for the 4:5 Instagram carousel,
-    "landscape" for 16:9 YouTube frames) and `filename_prefix` keeps the sets
-    side by side in the same post folder. `for_video` renders the video wording
-    of the cover instead of the carousel's swipe prompt.
+    "landscape" for 16:9 YouTube frames, "story" for 9:16 Shorts) and
+    `filename_prefix` keeps the sets side by side in the same post folder.
     """
     os.makedirs(output_dir, exist_ok=True)
     spec = get_canvas(canvas)
@@ -1762,76 +1203,46 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     theme = plan.get("theme", DEFAULT_THEME)  # randomly assigned color theme for this carousel
     print(f"Using color theme: {theme}")
     
+    # The post's photo goes in the cover / one-card photo box: the user's
+    # original upload when there is one, else the AI background (generated
+    # once and archived as the master, so re-renders never pay again).
     master_bg_path = os.path.join(output_dir, "background_master.png")
-    bg_image = None
-    
-    if reuse_background and os.path.exists(master_bg_path):
-        print(f"Reusing existing background master image: {master_bg_path}")
-        try:
-            bg_image = Image.open(master_bg_path)
-            bg_image.load()
-            # The master is stored at the portrait size, so re-cover it for
-            # whichever canvas is being drawn (a no-op for portrait itself).
-            # A user's original photo, when kept, is fitted afresh instead.
-            source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
-            if bg_image.size != (canvas_w, canvas_h):
-                if os.path.exists(source_path):
-                    bg_image = fit_photo_to_canvas(Image.open(source_path).convert("RGB"), canvas_w, canvas_h)
-                else:
-                    bg_image = resize_to_cover(bg_image, canvas_w, canvas_h)
-        except Exception as e:
-            print(f"Failed to load existing master background: {e}. Generating new one.")
-            bg_image = None
-            
-    if bg_image is None and not allow_paid_background:
-        # Editing an existing post (photo added/removed): never spend money on a
-        # new background. Missing master -> the theme gradient fallback is used.
-        print("No background master available; falling back to the theme gradient (no API call).")
+    source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
+    post_photo, photo_anchor = None, 0.5
+    try:
+        if reuse_background and os.path.exists(source_path):
+            post_photo, photo_anchor = Image.open(source_path).convert("RGB"), 0.4
+        elif reuse_background and os.path.exists(master_bg_path):
+            print(f"Reusing existing background master image: {master_bg_path}")
+            # The AI prompt puts the subject in the upper third.
+            post_photo, photo_anchor = Image.open(master_bg_path).convert("RGB"), 0.2
+    except Exception as e:
+        print(f"Failed to load the post photo: {e}")
 
-    if bg_image is None and allow_paid_background:
-        # Generate DALL-E master background using the detailed image_prompt
+    if post_photo is None and not allow_paid_background:
+        # Editing an existing post (photo added/removed): never spend money on a
+        # new background. Missing master -> the photo box is a flat theme tint.
+        print("No background master available; drawing without a photo (no API call).")
+
+    if post_photo is None and allow_paid_background:
         raw_bg = generate_dalle_background(image_prompt)
         if raw_bg is not None:
-            # Always archive the master at the portrait size so a later
-            # landscape render can re-cover it without paying for a new image.
-            bg_image = resize_to_cover(raw_bg, WIDTH, HEIGHT)
+            post_photo, photo_anchor = resize_to_cover(raw_bg, WIDTH, HEIGHT), 0.2
             try:
-                bg_image.save(master_bg_path, "PNG")
+                post_photo.save(master_bg_path, "PNG")
                 print(f"Saved background master image to: {master_bg_path}")
                 # A user photo from an earlier run of this post no longer applies.
-                stale_source = os.path.join(output_dir, BACKGROUND_SOURCE)
-                if os.path.exists(stale_source):
-                    os.remove(stale_source)
+                if os.path.exists(source_path):
+                    os.remove(source_path)
             except Exception as e:
                 print(f"Failed to save background master image: {e}")
-            if (canvas_w, canvas_h) != (WIDTH, HEIGHT):
-                bg_image = resize_to_cover(raw_bg, canvas_w, canvas_h)
-
-    # The grade is applied at render time, so the stored master stays untouched.
-    style = plan.get("style")
-    if bg_image is not None:
-        bg_image = apply_color_grade(bg_image, get_style(style)["grade"])
-
-    # The newspaper cover shows the photo in a box rather than behind the page:
-    # the user's original photo when there is one, else the AI background,
-    # cropped toward its upper part where the prompt puts the subject.
-    cover_photo, cover_anchor = None, 0.5
-    if any(s.get("type") == "cover" for s in slides):
-        source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
-        try:
-            if os.path.exists(source_path):
-                cover_photo, cover_anchor = Image.open(source_path).convert("RGB"), 0.4
-            elif os.path.exists(master_bg_path):
-                cover_photo, cover_anchor = Image.open(master_bg_path).convert("RGB"), 0.2
-        except Exception as e:
-            print(f"Failed to load the cover photo: {e}")
 
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
-        img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title,
-                               theme=theme, photo_dir=output_dir, canvas=canvas, for_video=for_video,
-                               style=style, cover_photo=cover_photo, cover_anchor=cover_anchor)
+        img = draw_card_layout(slide, total_pages, hooking_title, article_title=article_title,
+                               theme=theme, photo_dir=output_dir, canvas=canvas,
+                               post_photo=post_photo, photo_anchor=photo_anchor)
 
         filename = f"{filename_prefix}_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)

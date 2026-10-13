@@ -432,7 +432,7 @@ async function replaceBackgroundWith(file) {
         }
     } catch (error) {
         console.error(error);
-        alert(`배경 사진 변경 중 오류가 발생했습니다: ${error.message}`);
+        alert(`사진 변경 중 오류가 발생했습니다: ${error.message}`);
     } finally {
         loadingOverlay.classList.add('hidden');
     }
@@ -594,7 +594,7 @@ function renderSlidesPreview(imageUrls, photoSlides) {
             bg.type = 'button';
             bg.className = 'slide-insert-btn';
             bg.textContent = '📷 사진 교체';
-            bg.title = '이 카드의 배경 사진 바꾸기';
+            bg.title = '이 카드의 사진 바꾸기';
             bg.addEventListener('click', (e) => {
                 e.stopPropagation();
                 triggerPhotoFor(BACKGROUND_TARGET);
@@ -638,7 +638,7 @@ const MODE_COPY = {
     },
     single: {
         heading: '1장 카드뉴스 프리뷰',
-        hint: '카드에 마우스를 올리면 나오는 <b>📷 사진 교체</b> 버튼으로 배경 사진을 바꿀 수 있어요. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)',
+        hint: '카드에 마우스를 올리면 나오는 <b>📷 사진 교체</b> 버튼으로 사진칸의 사진을 바꿀 수 있어요. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)',
         subPlaceholder: '제목 아래 본문입니다. 중요한 내용이 많으면 최대 5줄까지 쓸 수 있어요. (비워두면 제목만 들어갑니다)'
     }
 };
