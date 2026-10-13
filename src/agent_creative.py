@@ -249,9 +249,9 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
     fallback_response = _single_card_plan(
         headline="AI로 카드뉴스 만드는 시간, 3분이면 끝",
         card_text=(
-            "기사 링크 하나만 넣으면\n"
-            "**핵심만 담은 카드 한 장이 완성돼요**\n"
-            "본문 캡션과 해시태그까지 함께 나옵니다"
+            "기사 링크 하나로 카드 완성\n"
+            "**핵심만 담은 카드 한 장 자동 생성**\n"
+            "본문 캡션·해시태그까지 함께 제공"
         ),
         caption=(
             "기사 링크 하나만 넣으면 카드 한 장이 통째로 완성됩니다.\n"
@@ -295,6 +295,8 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
    - 반대로 줄 수를 채우려고 덜 중요한 내용이나 뻔한 문장을 끼워 넣지는 마. 4줄째, 5줄째는 정말 담을 핵심이 남아 있을 때만 쓰는 여유분이야.
    - 카드가 한 장뿐이라 뒤에 이어지는 슬라이드가 없어. 그러니 '무엇이 어떻게 됐는지'와 '그래서 독자에게 뭐가 달라지는지'가 이 몇 줄 안에 다 들어가야 해.
    - 각 줄은 18자 내외의 완결된 구/절로 쓰고 `\\n`으로 구분해줘. 조사(을/를/이/가/은/는/와/과/의/로)나 접속사로 줄을 끝내지 마.
+   - (매우 중요) 문장은 신문 헤드라인처럼 **명사형으로 짧게 끝내는 개조식**으로 써줘. "~했습니다", "~합니다", "~해요", "~됩니다", "~했다" 같은 서술형 어미는 절대 쓰지 마. 마침표도 붙이지 마.
+     예: "신형 갤럭시 10월 출시했습니다" -> "신형 갤럭시 10월 출시", "가격은 129만 원으로 동결됐어요" -> "가격 129만 원 동결", "대상자가 2배로 늘어납니다" -> "지원 대상 2배 확대"
    - 구체적인 수치·날짜·금액·비율 같은 사실을 반드시 포함하고, 기사에 없는 내용은 절대 지어내지 마.
    - '·', '-' 같은 목록 기호는 붙이지 말고, 대제목(`hooking_title`) 문장을 그대로 반복하지 마.
    - (매우 중요) 이 중 독자가 꼭 기억해야 할 **가장 핵심적인 한 줄**을 골라 그 줄 전체를 `**문장**` 형태로 감싸줘. 강조는 딱 1줄만.
@@ -314,7 +316,7 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
 JSON 스키마:
 {{
   "hooking_title": "카드에 크게 들어갈 대제목",
-  "card_text": "첫째 줄 핵심\\n둘째 줄 핵심\\n**가장 중요한 한 줄**\\n넷째 줄 핵심",
+  "card_text": "신형 모델 10월 출시\\n가격 129만 원 동결\\n**사전예약 시 20% 할인**\\n국내 판매 11월부터",
   "theme": "blue",
   "final_caption": "핵심 내용 첫째 줄\\n핵심 내용 둘째 줄\\n핵심 내용 셋째 줄\\n\\n#해시태그1 #해시태그2 #해시태그3",
   "image_prompt": "A detailed English prompt for a photorealistic photograph based on the selected keywords"
@@ -347,7 +349,6 @@ JSON 스키마:
                 "지금 가장 주목받는 핵심 이슈만 정리했어요.\n"
                 "놓치면 안 되는 배경과 포인트를 함께 짚었습니다.\n\n"
                 "#트렌드이슈 #뉴스요약 #실시간트렌드"
-                "#트렌드이슈 #뉴스요약 #실시간트렌드 #이슈분석"
             ),
             image_prompt=(
                 f"A photorealistic editorial photograph representing {article_title[:20]}, "

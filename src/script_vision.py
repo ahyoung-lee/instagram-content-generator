@@ -933,13 +933,33 @@ class PaperPage:
             y += line_height
         return y
 
-    def photo(self, photo: Image.Image, box: tuple, anchor: float = 0.5) -> None:
-        """The photo, tinted with the theme color, over an offset block of it."""
+    def photo(self, photo: Image.Image, box: tuple, anchor: float = 0.5, whole: bool = False,
+              align: tuple = (0.0, 0.0)) -> tuple:
+        """
+        The photo, tinted with the theme color, over an offset block of it.
+        By default it fills `box`, cropped around `anchor`. With `whole` the
+        entire photo is shown: it is scaled to fit inside `box` and the frame
+        shrinks to the photo's own shape, placed by `align` (x, y: 0 = left/top,
+        1 = right/bottom). Returns the frame actually drawn.
+        """
         bx0, by0, bx1, by1 = box
+        if whole:
+            scale = min((bx1 - bx0) / photo.width, (by1 - by0) / photo.height)
+            w, h = max(1, int(photo.width * scale)), max(1, int(photo.height * scale))
+            bx0 += int(((bx1 - bx0) - w) * align[0])
+            by0 += int(((by1 - by0) - h) * align[1])
+            bx1, by1 = bx0 + w, by0 + h
+            try:
+                resample_filter = Image.Resampling.LANCZOS
+            except AttributeError:
+                resample_filter = Image.ANTIALIAS
+            fitted = photo.resize((w, h), resample_filter)
+        else:
+            fitted = resize_to_cover(photo, bx1 - bx0, by1 - by0, anchor)
         off = self.p["shadow"]
         self.draw.rectangle([bx0 + off, by0 + off, bx1 + off, by1 + off], fill=self.key)
-        fitted = resize_to_cover(photo, bx1 - bx0, by1 - by0, anchor)
         self.image.paste(duotone_photo(fitted, self.key), (bx0, by0))
+        return bx0, by0, bx1, by1
 
 
 def _headline_rows(title: str, steps, wrap: int, fits, default_last: bool) -> tuple:
@@ -1010,7 +1030,7 @@ def _title_seed(text: str) -> int:
 
 def draw_paper_cover(slide: dict, hooking_title: str, photo: Optional[Image.Image],
                      article_title: str = None, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
-                     photo_anchor: float = 0.5) -> Image.Image:
+                     photo_anchor: Optional[float] = 0.5) -> Image.Image:
     """
     The carousel cover: a left-aligned headline of at most four lines with one
     marker-highlighted stretch, optional sub-copy, and the post's photo in a box
@@ -1047,10 +1067,14 @@ def draw_paper_cover(slide: dict, hooking_title: str, photo: Optional[Image.Imag
         y = page.lines(sub_rows, m, y + p["sub_gap"], p["sub_line"])
 
     bx0, by0, bx1, by1 = p["photo_box"]
+    whole = photo_anchor is None
     if not page.side_photo:
-        by0 = min(by0, max(p["photo_top_min"], y + 60))
+        # A cropped photo fills the box, which grows up toward the headline. A
+        # whole photo gets all the room under the headline and sits centered.
+        by0 = y + 60 if whole else min(by0, max(p["photo_top_min"], y + 60))
     if photo is not None:
-        page.photo(photo, (bx0, by0, bx1, by1), photo_anchor)
+        page.photo(photo, (bx0, by0, bx1, by1), photo_anchor or 0.5, whole=whole,
+                   align=(0.5, 0.5) if page.side_photo else (0.0, 0.5))
     else:
         page.draw.rectangle([bx0, by0, bx1, by1], fill=_mix(page.key, PAPER_COLOR, 0.55))
     return page.image
@@ -1092,14 +1116,15 @@ def draw_paper_card(slide: dict, total_pages: int, theme: str = "orange", canvas
 
     if has_photo:
         photo = Image.open(photo_path).convert("RGB")
+        # The user's own photo is always shown whole, never cropped.
         if side:
-            page.photo(photo, p["photo_box"])
+            page.photo(photo, p["photo_box"], whole=True, align=(0.5, 0.5))
         else:
             off = p["shadow"]
             text_h = len(rows) * line_height
             photo_h = max(p["photo_min"], min(bottom - y - off - p["photo_gap"] - text_h, p["photo_max"]))
-            page.photo(photo, (m, y, W - m, y + photo_h))
-            y += photo_h + off + p["photo_gap"]
+            frame = page.photo(photo, (m, y, W - m, y + photo_h), whole=True)
+            y = frame[3] + off + p["photo_gap"]
 
     # Squeeze the leading when the copy is long; center it when there is room
     # (but keep it under the photo when there is one).
@@ -1114,7 +1139,7 @@ def draw_paper_card(slide: dict, total_pages: int, theme: str = "orange", canvas
 
 def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
                       article_title: str = None, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
-                      photo_anchor: float = 0.5) -> Image.Image:
+                      photo_anchor: Optional[float] = 0.5) -> Image.Image:
     """
     The one-card post: "오늘의 한 장" label, a headline of up to four lines, the
     photo box, and the body block (up to five lines, one highlighted) at the
@@ -1150,11 +1175,13 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     if in_column:
         # Body anchored to the bottom; the photo takes everything in between.
         body_y = max(y + photo_room, bottom - len(body_rows) * step[3])
-        page.photo(photo, (m, y, page.W - m, body_y - photo_gap - p["shadow"]), photo_anchor)
+        page.photo(photo, (m, y, page.W - m, body_y - photo_gap - p["shadow"]), photo_anchor or 0.5,
+                   whole=photo_anchor is None, align=(0.0, 0.5))
         page.lines(body_rows, m, body_y, step[3])
     else:
         if photo is not None:
-            page.photo(photo, p["photo_box"], photo_anchor)
+            page.photo(photo, p["photo_box"], photo_anchor or 0.5,
+                       whole=photo_anchor is None, align=(0.5, 0.5))
         page.lines(body_rows, m, y, step[3])
     return page.image
 
@@ -1162,13 +1189,14 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_title: str = None,
                      theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS,
                      post_photo: Optional[Image.Image] = None,
-                     photo_anchor: float = 0.5) -> Image.Image:
+                     photo_anchor: Optional[float] = 0.5) -> Image.Image:
     """
     Draws one card as a newspaper page. `canvas` picks the shape ("portrait"
     4:5 Instagram, "landscape" 16:9 YouTube, "story" 9:16 Shorts). `post_photo`
     is the post's photo (the user's upload or the AI background) shown on the
-    cover and the one-card post; a photo the user put on a content card is
-    looked up in `photo_dir`.
+    cover and the one-card post, cropped around `photo_anchor` (0 = top), or
+    shown whole when it is None (the user's upload). A photo the user put on
+    a content card is looked up in `photo_dir` and is always shown whole.
     """
     slide_type = slide.get("type", "content")
     if slide_type == "cover":
@@ -1211,7 +1239,8 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     post_photo, photo_anchor = None, 0.5
     try:
         if reuse_background and os.path.exists(source_path):
-            post_photo, photo_anchor = Image.open(source_path).convert("RGB"), 0.4
+            # The user's own photo is shown whole, never cropped.
+            post_photo, photo_anchor = Image.open(source_path).convert("RGB"), None
         elif reuse_background and os.path.exists(master_bg_path):
             print(f"Reusing existing background master image: {master_bg_path}")
             # The AI prompt puts the subject in the upper third.
