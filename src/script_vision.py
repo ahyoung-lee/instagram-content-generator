@@ -1110,9 +1110,9 @@ def draw_paper_card(slide: dict, total_pages: int, theme: str = "orange", canvas
         rows = _copy_rows(format_korean_line_breaks(main_text).split("\n"), size, wrap, header_bold=True)
 
     y = p["body_top"]
-    page.badge(badge_text, m, y)
-    y += p["badge_h"] + p["badge_gap"]
     bottom = p["body_bottom"]
+    # The label rides directly on top of the copy, so it counts as part of it.
+    label_h = p["badge_h"] + p["badge_gap"]
 
     if has_photo:
         photo = Image.open(photo_path).convert("RGB")
@@ -1121,19 +1121,20 @@ def draw_paper_card(slide: dict, total_pages: int, theme: str = "orange", canvas
             page.photo(photo, p["photo_box"], whole=True, align=(0.5, 0.5))
         else:
             off = p["shadow"]
-            text_h = len(rows) * line_height
+            text_h = label_h + len(rows) * line_height
             photo_h = max(p["photo_min"], min(bottom - y - off - p["photo_gap"] - text_h, p["photo_max"]))
             frame = page.photo(photo, (m, y, W - m, y + photo_h), whole=True)
             y = frame[3] + off + p["photo_gap"]
 
-    # Squeeze the leading when the copy is long; center it when there is room
-    # (but keep it under the photo when there is one).
-    area = bottom - y
+    # Squeeze the leading when the copy is long; center label + copy when there
+    # is room (but keep them right under the photo when there is one).
+    area = bottom - y - label_h
     if rows and len(rows) * line_height > area:
         line_height = max(p["min_line"], area // len(rows))
     if not has_photo or side:
         y += max(0, (area - len(rows) * line_height) // 2)
-    page.lines(rows, m, y, line_height)
+    page.badge(badge_text, m, y)
+    page.lines(rows, m, y + label_h, line_height)
     return page.image
 
 
