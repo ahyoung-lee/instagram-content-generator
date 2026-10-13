@@ -6,7 +6,7 @@ import urllib.parse
 from io import BytesIO
 from typing import Optional
 from openai import OpenAI
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageOps
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -51,6 +51,18 @@ CANVASES = {
             # name instead (see the `for_video` flag).
             "teaser_text": "옆으로 넘겨서 보기 ▶",
             "teaser_text_video": "always good",
+        },
+        # The carousel cover, laid out like a newspaper front page: a ruled
+        # header, a left-aligned headline of up to four lines and the photo in a
+        # box at the bottom (see draw_paper_cover).
+        "paper": {
+            "header_top": 95, "header_h": 56, "header_font": 26,
+            "title_top": 215, "title_bottom": 740, "title_wrap": 920,
+            "title_steps": ((84, 100), (76, 92), (68, 84), (60, 74)),
+            "sub_font": 30, "sub_line": 44, "sub_gap": 22, "sub_wrap": 920,
+            # The box's top follows the headline (min..max), its bottom is fixed.
+            "photo_box": (80, 800, 1000, 1180), "photo_top_min": 600, "shadow": 14,
+            "rule_y": 1245,
         },
         # The one-card post: headline plus a short body block, both sitting on
         # the darkened lower half of the photo. It carries more copy than a
@@ -117,6 +129,15 @@ CANVASES = {
             # swipe-prompt variant to choose between.
             "teaser_text": "always good",
         },
+        # Headline on the left, photo box on the right.
+        "paper": {
+            "header_top": 70, "header_h": 60, "header_font": 28,
+            "title_top": 200, "title_bottom": 920, "title_wrap": 820,
+            "title_steps": ((92, 110), (84, 100), (76, 92), (68, 82)),
+            "sub_font": 34, "sub_line": 50, "sub_gap": 26, "sub_wrap": 820,
+            "photo_box": (1030, 200, 1764, 900), "photo_top_min": 200, "shadow": 16,
+            "rule_y": 975,
+        },
         "single": {
             "grad_start": 60,
             "grad_full": 330,
@@ -182,6 +203,15 @@ CANVASES = {
             "teaser_font": 26,
             "teaser_text": "옆으로 넘겨서 보기 ▶",
             "teaser_text_video": "always good",
+        },
+        # Starts below YouTube's top bar and ends above the bottom 480px band.
+        "paper": {
+            "header_top": 150, "header_h": 56, "header_font": 26,
+            "title_top": 275, "title_bottom": 840, "title_wrap": 920,
+            "title_steps": ((84, 100), (76, 92), (68, 84), (60, 74)),
+            "sub_font": 30, "sub_line": 44, "sub_gap": 22, "sub_wrap": 920,
+            "photo_box": (80, 900, 1000, 1330), "photo_top_min": 680, "shadow": 14,
+            "rule_y": 1395,
         },
         "single": {
             "grad_start": 180,
@@ -887,9 +917,12 @@ def generate_dalle_background(prompt_text: str) -> Image.Image:
         print(f"Error generating AI background via OpenAI: {e}. Falling back to gradient.")
         return None
 
-def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+def resize_to_cover(image: Image.Image, target_width: int, target_height: int,
+                    anchor_y: float = 0.5) -> Image.Image:
     """
     Resizes and crops a PIL Image to cover the target dimensions (aspect ratio fill).
+    `anchor_y` picks which part of a too-tall image survives the crop
+    (0 = top, 0.5 = center, 1 = bottom).
     """
     img_w, img_h = image.size
     target_ratio = target_width / target_height
@@ -911,9 +944,8 @@ def resize_to_cover(image: Image.Image, target_width: int, target_height: int) -
 
     resized_img = image.resize((new_w, new_h), resample_filter)
 
-    # Crop the center
     left = (new_w - target_width) // 2
-    top = (new_h - target_height) // 2
+    top = int((new_h - target_height) * anchor_y)
     right = left + target_width
     bottom = top + target_height
 
@@ -1038,8 +1070,255 @@ def apply_dark_gradient(image: Image.Image, width: int, height: int, start_y: in
     return Image.alpha_composite(image, overlay)
 
 
+# --- Newspaper cover ---
+PAPER_COLOR = (240, 238, 233)
+PAPER_INK = (26, 26, 28)
+PAPER_HEADER_LEFT = "TODAY NEWS"
+PAPER_HEADER_RIGHT = "ALWAYS GOOD"
+PAPER_TITLE_MAX_LINES = 4
+
+
+def _mix(color_a: tuple, color_b: tuple, amount: float) -> tuple:
+    """`amount` of color_a over color_b (RGB)."""
+    return tuple(int(a * amount + b * (1 - amount)) for a, b in zip(color_a[:3], color_b[:3]))
+
+
+def make_paper_background(width: int, height: int, seed: int) -> Image.Image:
+    """
+    Off-white newsprint: faint, out-of-focus columns of "text" showing through
+    from the other side of the page, plus a little grain.
+    """
+    rng = random.Random(seed)
+    base = Image.new("RGB", (width, height), PAPER_COLOR)
+
+    ghost = Image.new("L", (width, height), 0)
+    g_draw = ImageDraw.Draw(ghost)
+    cols = 4 if width > height else 3
+    gutter = 34
+    col_w = (width - 80 - gutter * (cols - 1)) / cols
+    for c in range(cols):
+        cx0 = int(40 + c * (col_w + gutter))
+        cx1 = int(cx0 + col_w)
+        y = rng.randint(20, 40)
+        while y < height - 20:
+            if rng.random() < 0.08:  # paragraph break
+                y += 26
+                continue
+            x = cx0
+            line_end = cx1 if rng.random() > 0.12 else rng.randint(cx0 + 40, cx1)
+            while x < line_end:
+                word = rng.randint(18, 80)
+                g_draw.rectangle([x, y, min(x + word, line_end), y + 10], fill=255)
+                x += word + 11
+            y += 25
+    ghost = ghost.filter(ImageFilter.GaussianBlur(5)).point(lambda v: int(v * 0.07))
+    base = Image.composite(Image.new("RGB", (width, height), (120, 118, 114)), base, ghost)
+
+    grain = Image.effect_noise((width, height), 22).convert("RGB")
+    return Image.blend(base, grain, 0.035)
+
+
+def duotone_photo(photo: Image.Image, key_color: tuple) -> Image.Image:
+    """Recolors a photo into shades of the theme color, like a printed spot color."""
+    gray = ImageOps.autocontrast(ImageOps.grayscale(photo), cutoff=1)
+    dark = _mix(key_color, (0, 0, 0), 0.30)
+    light = _mix(key_color, (255, 255, 255), 0.35)
+    return ImageOps.colorize(gray, dark, light, mid=key_color[:3])
+
+
+def draw_brush_highlight(image: Image.Image, x0: int, y0: int, x1: int, y1: int,
+                         color: tuple, rng: random.Random) -> None:
+    """A rough marker stroke behind a headline line: jagged edges, streaky ends."""
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    l_draw = ImageDraw.Draw(layer)
+    fill = color + (255,)
+
+    top = [(x, y0 + rng.randint(-3, 3)) for x in range(x0, x1, 14)] + [(x1, y0 + rng.randint(-3, 3))]
+    bottom = [(x, y1 + rng.randint(-3, 3)) for x in range(x1, x0, -14)] + [(x0, y1 + rng.randint(-3, 3))]
+    l_draw.polygon(top + bottom, fill=fill)
+
+    # Dry-brush streaks trailing off both ends.
+    band = y1 - y0
+    for _ in range(9):
+        sy = y0 + rng.randint(0, band)
+        sh = rng.randint(2, 6)
+        l_draw.rectangle([x1, sy, x1 + rng.randint(8, 55), sy + sh], fill=fill)
+        sy = y0 + rng.randint(0, band)
+        l_draw.rectangle([x0 - rng.randint(4, 26), sy, x0, sy + rng.randint(2, 6)], fill=fill)
+
+    layer = layer.filter(ImageFilter.GaussianBlur(0.8))
+    image.alpha_composite(layer)
+
+
+def draw_swipe_arrow(draw: ImageDraw.ImageDraw, x: int, y_mid: int, size: int = 90) -> None:
+    """Outlined right-pointing arrow that sits on the bottom rule."""
+    h = size * 0.56
+    shaft = h * 0.42
+    head_x = x + size * 0.55
+    pts = [
+        (x, y_mid - shaft / 2), (head_x, y_mid - shaft / 2), (head_x, y_mid - h / 2),
+        (x + size, y_mid), (head_x, y_mid + h / 2), (head_x, y_mid + shaft / 2),
+        (x, y_mid + shaft / 2),
+    ]
+    draw.polygon(pts, fill=(252, 251, 248, 255), outline=PAPER_INK + (255,), width=4)
+    # Hatching in the shaft, like the hand-drawn arrow it imitates.
+    for i in range(1, 6):
+        hx = x + i * (head_x - x) / 6
+        draw.line([(hx, y_mid - shaft / 2 + 5), (hx, y_mid + shaft / 2 - 5)], fill=PAPER_INK + (255,), width=2)
+
+
+def _title_highlight_spans(title: str) -> tuple:
+    """
+    Strips '**' markers from the headline and returns (clean text, set of
+    character indices that were inside markers).
+    """
+    clean, marked, inside = [], set(), False
+    i = 0
+    while i < len(title):
+        if title.startswith("**", i):
+            inside = not inside
+            i += 2
+            continue
+        if inside:
+            marked.add(len(clean))
+        clean.append(title[i])
+        i += 1
+    return "".join(clean), marked
+
+
+def draw_paper_cover(slide: dict, hooking_title: str, cover_photo: Optional[Image.Image],
+                     article_title: str = None, theme: str = "orange", canvas: str = DEFAULT_CANVAS,
+                     for_video: bool = False, cover_anchor: float = 0.5) -> Image.Image:
+    """
+    The carousel cover as a newspaper front page: ruled header ("TODAY NEWS"),
+    a left-aligned headline of at most four lines with one marker-highlighted
+    stretch, and the post's photo in a theme-tinted box near the bottom.
+    `cover_photo` is cropped to the box here, keeping the part at `cover_anchor`
+    (0 = top, 1 = bottom) of a photo taller than the box.
+    """
+    spec = get_canvas(canvas)
+    W, H = spec["size"]
+    margin = spec["margin"]
+    p = spec["paper"]
+    key_color = get_theme(theme)["key"]
+    ink = PAPER_INK + (255,)
+
+    title_raw = remove_emojis((slide.get("main_text") or "").strip())
+    if not title_raw:
+        title_raw = remove_emojis((article_title or hooking_title or "").strip())
+    title_raw = re.sub(r"\s+", " ", title_raw)
+    title, marked = _title_highlight_spans(title_raw)
+
+    seed = sum(ord(ch) for ch in title) or 1
+    rng = random.Random(seed)
+    image = make_paper_background(W, H, seed).convert("RGBA")
+    draw = ImageDraw.Draw(image)
+
+    # --- Header: rule, labels, rule ---
+    rule_x1 = W - margin
+    h_top, h_bot = p["header_top"], p["header_top"] + p["header_h"]
+    draw.rectangle([margin, h_top, rule_x1, h_top + 2], fill=ink)
+    draw.rectangle([margin, h_bot, rule_x1, h_bot + 2], fill=ink)
+    header_font = get_system_font(p["header_font"], bold=True)
+    label_y = h_top + (p["header_h"] - p["header_font"]) // 2
+    draw.text((margin, label_y), PAPER_HEADER_LEFT, fill=ink, font=header_font)
+    draw.text((rule_x1 - _text_width(header_font, PAPER_HEADER_RIGHT), label_y),
+              PAPER_HEADER_RIGHT, fill=ink, font=header_font)
+
+    # --- Headline: largest size that fits in four lines ---
+    sub_font = get_system_font(p["sub_font"])
+    sub_font_bold = get_system_font(p["sub_font"], bold=True)
+    sub_lines = []
+    for logical in cover_sub_lines(slide.get("sub_text")):
+        clean, has_highlight = strip_highlight_markers(logical)
+        line_font = sub_font_bold if has_highlight else sub_font
+        for piece in wrap_text(clean, line_font, p["sub_wrap"]):
+            sub_lines.append((piece, line_font))
+
+    def sub_height(count: int) -> int:
+        return p["sub_gap"] + count * p["sub_line"] if count else 0
+
+    title_zone = p["title_bottom"] - p["title_top"]
+    for font_size, line_height in p["title_steps"]:
+        title_font = get_system_font(font_size, bold=True)
+        lines = wrap_text(title, title_font, p["title_wrap"])
+        if len(lines) <= PAPER_TITLE_MAX_LINES and \
+                len(lines) * line_height + sub_height(len(sub_lines)) <= title_zone:
+            break
+    if len(lines) > PAPER_TITLE_MAX_LINES:
+        lines = lines[:PAPER_TITLE_MAX_LINES]
+        last = lines[-1]
+        while last and _text_width(title_font, last + "…") > p["title_wrap"]:
+            last = last[:-1]
+        lines[-1] = last.rstrip() + "…"
+    while sub_lines and len(lines) * line_height + sub_height(len(sub_lines)) > title_zone:
+        sub_lines.pop()
+
+    # Which stretch of each line gets the marker stroke: the '**' words when the
+    # headline has them, otherwise the whole last line.
+    highlight_color = _mix(key_color, PAPER_COLOR, 0.78)
+    pad_x, cursor = 14, 0
+    spans = []
+    for idx, line in enumerate(lines):
+        pos = title.find(line.rstrip("…"), cursor)
+        span = None
+        if marked and pos >= 0:
+            hits = [i for i in range(len(line)) if pos + i in marked and line[i] != " "]
+            if hits:
+                span = (hits[0], hits[-1] + 1)
+            cursor = pos + len(line)
+        elif not marked and idx == len(lines) - 1:
+            span = (0, len(line))
+        spans.append(span)
+
+    y = p["title_top"]
+    # Stroke spans the glyphs' real ink height (fonts sit at different offsets).
+    if hasattr(title_font, "getbbox"):
+        _, ink_top, _, ink_bottom = title_font.getbbox("가Ag")
+    else:
+        ink_top, ink_bottom = 0, line_height
+    ink_pad = int(line_height * 0.09)
+    for line, span in zip(lines, spans):
+        if span:
+            sx0 = margin + _text_width(title_font, line[:span[0]]) if span[0] else margin
+            sx1 = margin + _text_width(title_font, line[:span[1]])
+            draw_brush_highlight(image, sx0 - pad_x, y + ink_top - ink_pad, sx1 + pad_x,
+                                 y + ink_bottom + ink_pad, highlight_color, rng)
+            draw = ImageDraw.Draw(image)
+        draw_text_safe(draw, (margin, y), line, fill=ink, font=title_font)
+        y += line_height
+
+    if sub_lines:
+        y += p["sub_gap"]
+        for text, line_font in sub_lines:
+            draw_text_safe(draw, (margin, y), text, fill=(70, 70, 74, 255), font=line_font)
+            y += p["sub_line"]
+
+    # --- Photo box with an offset block of the theme color behind it ---
+    # A short headline leaves room, so the box grows upward to meet it.
+    bx0, by0, bx1, by1 = p["photo_box"]
+    if bx0 < p["title_wrap"] + margin:  # box sits under the headline, not beside it
+        by0 = min(by0, max(p["photo_top_min"], y + 60))
+    off = p["shadow"]
+    draw.rectangle([bx0 + off, by0 + off, bx1 + off, by1 + off], fill=key_color)
+    if cover_photo is not None:
+        box_photo = resize_to_cover(cover_photo, bx1 - bx0, by1 - by0, cover_anchor)
+        image.paste(duotone_photo(box_photo, key_color), (bx0, by0))
+    else:
+        draw.rectangle([bx0, by0, bx1, by1], fill=_mix(key_color, PAPER_COLOR, 0.55))
+    draw = ImageDraw.Draw(image)
+
+    # --- Bottom rule, with the swipe arrow on the carousel ---
+    draw.rectangle([margin, p["rule_y"], rule_x1, p["rule_y"] + 2], fill=ink)
+    if not for_video:
+        draw_swipe_arrow(draw, rule_x1 - 62, p["rule_y"] + 1)
+
+    return image
+
+
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image: Image.Image = None, article_title: str = None, theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS, for_video: bool = False,
-                     style: Optional[dict] = None) -> Image.Image:
+                     style: Optional[dict] = None, cover_photo: Optional[Image.Image] = None,
+                     cover_anchor: float = 0.5) -> Image.Image:
     """
     Generates a single image slide based on its content and type.
     Uses a premium glassmorphic card news layout structure for content/CTA,
@@ -1049,9 +1328,13 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, bg_image
     YouTube); the layout numbers for each live in CANVASES. `for_video` marks a
     card that will end up in a video rather than in the swipeable carousel, which
     swaps the cover's swipe prompt for the brand sign-off. `style` is the
-    post's look (see STYLE_OPTIONS).
+    post's look (see STYLE_OPTIONS). The carousel cover is drawn as a newspaper
+    page by draw_paper_cover, with `cover_photo` in its photo box.
     """
     slide_type = slide.get("type", "content")
+    if slide_type == "cover":
+        return draw_paper_cover(slide, hooking_title, cover_photo, article_title=article_title,
+                                theme=theme, canvas=canvas, for_video=for_video, cover_anchor=cover_anchor)
     look = get_style(style)
     centered = look["cover_align"] == "center"
     theme_data = get_theme(theme)
@@ -1529,12 +1812,26 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     if bg_image is not None:
         bg_image = apply_color_grade(bg_image, get_style(style)["grade"])
 
+    # The newspaper cover shows the photo in a box rather than behind the page:
+    # the user's original photo when there is one, else the AI background,
+    # cropped toward its upper part where the prompt puts the subject.
+    cover_photo, cover_anchor = None, 0.5
+    if any(s.get("type") == "cover" for s in slides):
+        source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
+        try:
+            if os.path.exists(source_path):
+                cover_photo, cover_anchor = Image.open(source_path).convert("RGB"), 0.4
+            elif os.path.exists(master_bg_path):
+                cover_photo, cover_anchor = Image.open(master_bg_path).convert("RGB"), 0.2
+        except Exception as e:
+            print(f"Failed to load the cover photo: {e}")
+
     image_paths = []
     for slide in slides:
         page_num = slide.get("page", 1)
         img = draw_card_layout(slide, total_pages, hooking_title, bg_image, article_title=article_title,
                                theme=theme, photo_dir=output_dir, canvas=canvas, for_video=for_video,
-                               style=style)
+                               style=style, cover_photo=cover_photo, cover_anchor=cover_anchor)
 
         filename = f"{filename_prefix}_{page_num:02d}.jpg"
         filepath = os.path.join(output_dir, filename)
