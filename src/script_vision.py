@@ -218,6 +218,9 @@ CANVASES = {
 }
 DEFAULT_CANVAS = "portrait"
 
+# The user's uploaded background photo, kept uncropped next to background_master.png.
+BACKGROUND_SOURCE = "background_source.jpg"
+
 
 def get_canvas(name: str) -> dict:
     return CANVASES.get(name or DEFAULT_CANVAS, CANVASES[DEFAULT_CANVAS])
@@ -938,18 +941,56 @@ def save_uploaded_photo(file_bytes: bytes, output_dir: str, filename: str) -> st
     print(f"Saved uploaded photo: {filepath}")
     return filepath
 
+def fit_photo_to_canvas(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    """
+    Fits a user photo to a card. A photo as tall as the card (or taller) simply
+    covers it. A photo wider than the card is not cropped down to its middle:
+    it keeps its full width across the top, and the space below is filled with a
+    blurred, darkened copy of the same photo that the title is written on.
+    """
+    img_ratio = image.width / image.height
+    if img_ratio <= (target_width / target_height) * 1.05:
+        return resize_to_cover(image, target_width, target_height)
+
+    try:
+        resample_filter = Image.Resampling.LANCZOS
+    except AttributeError:
+        resample_filter = Image.ANTIALIAS
+
+    # Backdrop: the same photo, covered, blurred and darkened.
+    base = resize_to_cover(image, target_width, target_height).filter(ImageFilter.GaussianBlur(30))
+    base = Image.blend(base, Image.new("RGB", base.size, (10, 10, 15)), 0.45)
+
+    photo_h = int(target_width / img_ratio)
+    photo = image.resize((target_width, photo_h), resample_filter)
+
+    # Fade the photo's bottom edge into the backdrop instead of a hard seam.
+    fade = min(160, photo_h // 3)
+    mask = Image.new("L", (target_width, photo_h), 255)
+    mask_draw = ImageDraw.Draw(mask)
+    for i in range(fade):
+        y = photo_h - fade + i
+        mask_draw.line([(0, y), (target_width, y)], fill=int(255 * (1 - i / fade)))
+
+    base.paste(photo, (0, 0), mask)
+    return base
+
+
 def save_background_master(file_bytes: bytes, output_dir: str) -> str:
     """
-    Stores a user-supplied photo as this post's background master, cropped to the
-    4:5 card size. Every card is then drawn over that photo instead of over an
-    AI-generated one, so attaching a photo also skips the paid image API call.
+    Stores a user-supplied photo as this post's background master at the 4:5
+    card size (a landscape photo sits across the top, see fit_photo_to_canvas).
+    Every card is then drawn over that photo instead of over an AI-generated
+    one, so attaching a photo also skips the paid image API call. The original
+    is kept too, so other canvases (16:9 video) are fitted from it.
     """
     os.makedirs(output_dir, exist_ok=True)
     img = Image.open(BytesIO(file_bytes)).convert("RGB")
-    cover = resize_to_cover(img, WIDTH, HEIGHT)
+    cover = fit_photo_to_canvas(img, WIDTH, HEIGHT)
 
     filepath = os.path.join(output_dir, "background_master.png")
     cover.save(filepath, "PNG")
+    img.save(os.path.join(output_dir, BACKGROUND_SOURCE), "JPEG", quality=95)
     print(f"Saved user-supplied background master: {filepath}")
     return filepath
 
@@ -1448,8 +1489,13 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
             bg_image.load()
             # The master is stored at the portrait size, so re-cover it for
             # whichever canvas is being drawn (a no-op for portrait itself).
+            # A user's original photo, when kept, is fitted afresh instead.
+            source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
             if bg_image.size != (canvas_w, canvas_h):
-                bg_image = resize_to_cover(bg_image, canvas_w, canvas_h)
+                if os.path.exists(source_path):
+                    bg_image = fit_photo_to_canvas(Image.open(source_path).convert("RGB"), canvas_w, canvas_h)
+                else:
+                    bg_image = resize_to_cover(bg_image, canvas_w, canvas_h)
         except Exception as e:
             print(f"Failed to load existing master background: {e}. Generating new one.")
             bg_image = None
@@ -1469,6 +1515,10 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
             try:
                 bg_image.save(master_bg_path, "PNG")
                 print(f"Saved background master image to: {master_bg_path}")
+                # A user photo from an earlier run of this post no longer applies.
+                stale_source = os.path.join(output_dir, BACKGROUND_SOURCE)
+                if os.path.exists(stale_source):
+                    os.remove(stale_source)
             except Exception as e:
                 print(f"Failed to save background master image: {e}")
             if (canvas_w, canvas_h) != (WIDTH, HEIGHT):
