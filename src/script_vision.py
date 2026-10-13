@@ -67,20 +67,19 @@ CANVASES = {
         },
     },
     "story": {
-        # 9:16 for a Shorts/Reels cut. The bottom 480px is left empty: that band
-        # is where the Shorts player stacks its title, handle and buttons. The
-        # header starts 150px down because YouTube draws its own top bar over
-        # the first ~100px of the frame.
+        # 9:16 for a Shorts/Reels cut. The page is centered vertically: about
+        # 315px of paper above the header and below the logo, which also keeps
+        # the header clear of YouTube's top bar (~100px).
         "size": (1080, 1920),
         "margin": 80,
         "paper": {
-            "header_top": 150, "header_h": 56, "header_font": 26,
-            "rule_y": 1395, "logo": 92, "page_font": 24,
-            "title_top": 275, "title_bottom": 840, "title_wrap": 920,
+            "header_top": 315, "header_h": 56, "header_font": 26,
+            "rule_y": 1560, "logo": 92, "page_font": 24,
+            "title_top": 440, "title_bottom": 1005, "title_wrap": 920,
             "title_steps": ((84, 100), (76, 92), (68, 84), (60, 74)),
             "sub_font": 30, "sub_line": 44, "sub_gap": 22, "sub_wrap": 920,
-            "photo_box": (80, 900, 1000, 1330), "photo_top_min": 680, "shadow": 14,
-            "body_top": 265, "body_bottom": 1340, "card_wrap": 920,
+            "photo_box": (80, 1065, 1000, 1495), "photo_top_min": 845, "shadow": 14,
+            "body_top": 430, "body_bottom": 1505, "card_wrap": 920,
             "badge_font": 24, "badge_h": 48, "badge_gap": 34,
             "body": (46, 74), "body_photo": (38, 58),
             "cta": (50, 80), "cta_photo": (40, 62), "min_line": 46,
