@@ -7,7 +7,8 @@ let currentPostData = {
     title: '',
     subtitle: '',      // up to 3 lines drawn under the cover title
     theme: '',         // accent color: rolled at random, then user-selectable
-    mode: 'carousel'   // 'carousel' = multi-card deck, 'single' = one-card post
+    mode: 'carousel',  // 'carousel' = multi-card deck, 'single' = one-card post
+    design: 'card1'    // one-card look: 'card1' newspaper, 'card2' circle photo on black
 };
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
@@ -646,12 +647,21 @@ const MODE_COPY = {
 // Reshapes the results area for the format that was just generated. A one-card
 // post has nothing to swipe through, so the reel/YouTube buttons step aside and
 // the 3-second shorts cut takes their place.
-function applyModeUI(mode) {
+function applyModeUI(mode, design) {
     const copy = MODE_COPY[mode] || MODE_COPY.carousel;
     if (previewHeading) previewHeading.textContent = copy.heading;
     if (insertHint) insertHint.innerHTML = copy.hint;
 
     const isSingle = mode === 'single';
+
+    // Card 2 draws the headline only, so the body box has nothing to edit.
+    const titleOnly = isSingle && design === 'card2';
+    const titleEditHeading = document.getElementById('title-edit-heading');
+    const coverSubHint = document.getElementById('cover-sub-hint');
+    if (titleEditHeading) titleEditHeading.textContent = titleOnly ? '제목 수정' : '표지 제목 · 내용 수정';
+    [coverSubInput, coverSubHint].forEach((el) => {
+        if (el) el.classList.toggle('hidden', titleOnly);
+    });
 
     // The same box takes three cover lines or five one-card body lines, so it
     // grows and relabels itself with the format.
@@ -666,7 +676,7 @@ function applyModeUI(mode) {
     if (shortsBtn) shortsBtn.classList.toggle('hidden', !isSingle);
 }
 
-async function runGenerate(mode) {
+async function runGenerate(mode, design = 'card1') {
     const url = urlInput.value.trim();
 
     // Ask for the password first (only the first time), before any loading UI.
@@ -685,6 +695,7 @@ async function runGenerate(mode) {
         const form = new FormData();
         form.append('url', url || '');
         form.append('mode', mode);
+        form.append('design', design);
         if (selectedBgFile) form.append('background', selectedBgFile);
 
         const response = await apiFetch('/api/generate', { method: 'POST', body: form });
@@ -705,10 +716,11 @@ async function runGenerate(mode) {
             currentPostData.zip_url = data.zip_url;
             currentPostData.title = data.title;
             currentPostData.mode = data.mode || 'carousel';
+            currentPostData.design = data.design || 'card1';
             // The accent color the backend rolled for this post, so the picker
             // can show which chip is currently in use.
             currentPostData.theme = (data.plan && data.plan.theme) || '';
-            applyModeUI(currentPostData.mode);
+            applyModeUI(currentPostData.mode, currentPostData.design);
             renderThemePicker();
 
             // Populate UI Elements
@@ -750,6 +762,11 @@ async function runGenerate(mode) {
 generateBtn.addEventListener('click', () => runGenerate('carousel'));
 if (generateOneBtn) {
     generateOneBtn.addEventListener('click', () => runGenerate('single'));
+}
+// Card 2: the same one-card post in its second design (circle photo on black).
+const generateCard2Btn = document.getElementById('generate-card2-btn');
+if (generateCard2Btn) {
+    generateCard2Btn.addEventListener('click', () => runGenerate('single', 'card2'));
 }
 
 // 2. Copy Caption to Clipboard

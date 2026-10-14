@@ -260,6 +260,17 @@ body {
     color: #fff;
 }
 
+/* Row of one-card buttons under the search bar, one per card design */
+.card-buttons {
+    display: flex;
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.card-buttons .btn-one {
+    padding: 14px 26px;
+}
+
 /* Divider */
 .divider {
     border: 0;

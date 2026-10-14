@@ -166,6 +166,7 @@ def _rerender_response(date_str: str, post_dir: str, data: dict) -> dict:
 async def api_generate(
     url: Optional[str] = Form(default=None),
     mode: str = Form(default="carousel"),
+    design: str = Form(default="card1"),
     background: Optional[UploadFile] = File(default=None),
     x_access_key: Optional[str] = Header(default=None),
 ):
@@ -174,6 +175,8 @@ async def api_generate(
 
     `mode` picks the format: "carousel" is the multi-card deck, "single" is the
     one-card post whose headline and short body block share one image.
+    `design` picks the one-card look: "card1" is the newspaper page, "card2"
+    the photo-in-a-circle on black with the headline only.
 
     An optional `background` photo replaces the AI-generated cover artwork: the
     uploaded image becomes this post's background master, so no paid image call
@@ -189,6 +192,10 @@ async def api_generate(
         mode = (mode or "carousel").strip().lower()
         if mode not in ("carousel", "single"):
             raise HTTPException(status_code=400, detail=f"알 수 없는 생성 모드입니다: {mode}")
+        from src.script_vision import SINGLE_DESIGNS
+        design = (design or "card1").strip().lower() if mode == "single" else "card1"
+        if design not in SINGLE_DESIGNS:
+            raise HTTPException(status_code=400, detail=f"알 수 없는 카드 디자인입니다: {design}")
 
         # Read the attached photo (if any) before anything expensive happens.
         custom_bg_bytes = None
@@ -205,6 +212,8 @@ async def api_generate(
         url_normalized = (url or "trending_rss").strip().lower().rstrip('/')
         if mode != "carousel":
             url_normalized = f"{url_normalized}#{mode}"
+        if design != "card1":
+            url_normalized = f"{url_normalized}-{design}"
         url_hash = hashlib.md5(url_normalized.encode('utf-8')).hexdigest()[:12]
 
         post_dir = os.path.join(SAVE_DIR, date_str, url_hash)
@@ -256,6 +265,10 @@ async def api_generate(
         # Step 2: Use LLM agent to create structured slide copy and captions
         if mode == "single":
             plan = generate_single_card_plan(title, content)
+            # The design rides on the slide, so every redraw (title edit, theme,
+            # photo swap, Shorts cut) keeps drawing it the same way.
+            for slide in plan.get("slides", []):
+                slide["design"] = design
         else:
             plan = generate_instagram_plan(title, content)
 
@@ -293,6 +306,7 @@ async def api_generate(
             "requested_url": url,
             "request_count": request_count,
             "mode": mode,
+            "design": design,
             "custom_background": bool(custom_bg_bytes),
             "title": title,
             "source_title": source_title,
@@ -313,6 +327,7 @@ async def api_generate(
         return {
             "success": True,
             "mode": mode,
+            "design": design,
             "title": title,
             "url": scraped_url,
             "plan": plan,

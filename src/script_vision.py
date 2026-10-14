@@ -44,6 +44,14 @@ CANVASES = {
             "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
             "single_photo_min": 240,
         },
+        # Card 2 (spotlight): label spot, photo circle (center x, center y,
+        # radius), the black fade (start y, fully black y), and the headline
+        # (bottom y, wrap width, (size, line height) steps).
+        "spotlight": {
+            "label": (80, 46, 24), "circle": (540, 640, 600), "fade": (640, 1290),
+            "title_bottom": 1180, "title_wrap": 940,
+            "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
+        },
     },
     "landscape": {
         # 1920x1080 is YouTube's recommended long-form size; the video step
@@ -64,6 +72,11 @@ CANVASES = {
             "photo_min": 0, "photo_max": 0, "photo_gap": 40,
             "single_steps": ((84, 100, 40, 62), (76, 92, 37, 57), (68, 82, 34, 52), (60, 74, 31, 47)),
             "single_photo_min": 0,
+        },
+        "spotlight": {
+            "label": (140, 60, 26), "circle": (960, 520, 580), "fade": (500, 1040),
+            "title_bottom": 960, "title_wrap": 1100,
+            "title_steps": ((104, 146), (94, 134), (84, 120), (74, 106)),
         },
     },
     "story": {
@@ -86,6 +99,12 @@ CANVASES = {
             "photo_min": 320, "photo_max": 620, "photo_gap": 44,
             "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
             "single_photo_min": 260,
+        },
+        # The headline stays clear of the Shorts UI at the bottom (~350px).
+        "spotlight": {
+            "label": (80, 150, 26), "circle": (540, 820, 640), "fade": (900, 1680),
+            "title_bottom": 1560, "title_wrap": 940,
+            "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
         },
     },
 }
@@ -1178,6 +1197,103 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     return page.image
 
 
+# --- Card 2: spotlight layout ---
+# A one-card post on black: the photo inside a large circle (like a spotlight
+# or lens), a black fade over the bottom, a small "always good" label top-left
+# and the headline in white at the bottom. Only the headline is drawn.
+SPOTLIGHT_BLACK = (8, 8, 10)
+SPOTLIGHT_LABEL = "always good"
+SPOTLIGHT_TITLE_MAX_LINES = 3
+SINGLE_DESIGNS = ("card1", "card2")
+
+
+def _radial_mask(diameter: int, curve) -> Image.Image:
+    """L mask of a disc whose value at radius fraction t (0 center, 1 edge) is curve(t)."""
+    size = 512
+    mask = Image.new("L", (size, size), 0)
+    m_draw = ImageDraw.Draw(mask)
+    half = size // 2
+    for step in range(half, 0, -1):
+        m_draw.ellipse([half - step, half - step, half + step, half + step],
+                       fill=int(curve(step / half)))
+    try:
+        resample_filter = Image.Resampling.BICUBIC
+    except AttributeError:
+        resample_filter = Image.BICUBIC
+    return mask.resize((diameter, diameter), resample_filter)
+
+
+def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
+                          article_title: str = None, theme: str = "orange",
+                          canvas: str = DEFAULT_CANVAS,
+                          photo_anchor: Optional[float] = 0.5) -> Image.Image:
+    """Card 2: the photo in a circle on black, headline only at the bottom."""
+    headline = remove_emojis((slide.get("main_text") or "").strip())
+    if not headline:
+        headline = remove_emojis((article_title or hooking_title or "").strip())
+    spec = get_canvas(canvas)
+    W, H = spec["size"]
+    s = spec["spotlight"]
+    key = get_theme(theme)["key"][:3]
+    image = Image.new("RGBA", (W, H), SPOTLIGHT_BLACK + (255,))
+
+    cx, cy, r = s["circle"]
+    d = r * 2
+    disc = _radial_mask(d, lambda t: 255 if t < 0.995 else 0).filter(ImageFilter.GaussianBlur(2))
+    if photo is not None:
+        # The circle is filled edge to edge; an uncropped upload is still cropped
+        # here, kept toward the top where faces and subjects usually are.
+        fitted = resize_to_cover(photo, d, d, 0.3 if photo_anchor is None else photo_anchor)
+        image.paste(fitted.convert("RGB"), (cx - r, cy - r), disc)
+        # Darken toward the rim, like a lens vignette.
+        shade = _radial_mask(d, lambda t: 0 if t < 0.62 else 175 * ((t - 0.62) / 0.38) ** 2)
+        image.paste(Image.new("RGB", (d, d), SPOTLIGHT_BLACK), (cx - r, cy - r), shade)
+    else:
+        image.paste(Image.new("RGB", (d, d), _mix(key, SPOTLIGHT_BLACK, 0.35)), (cx - r, cy - r), disc)
+
+    # A soft glow of the theme color along the rim.
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse([cx - r, cy - r, cx + r, cy + r], outline=key + (150,), width=10)
+    image.alpha_composite(glow.filter(ImageFilter.GaussianBlur(14)))
+
+    # Black fade over the bottom, fully black by fade_end.
+    fade_top, fade_end = s["fade"]
+    column = Image.new("L", (1, H), 0)
+    for y in range(fade_top, H):
+        t = min(1.0, (y - fade_top) / max(1, fade_end - fade_top))
+        column.putpixel((0, y), int(255 * t ** 1.4))
+    image.paste(Image.new("RGB", (W, H), SPOTLIGHT_BLACK), (0, 0), column.resize((W, H)))
+
+    draw = ImageDraw.Draw(image)
+    lx, ly, lsize = s["label"]
+    draw.text((lx, ly), SPOTLIGHT_LABEL, fill=(255, 255, 255, 220), font=get_system_font(lsize))
+
+    # Headline: the biggest step that fits in two lines, else in three, anchored
+    # to the bottom.
+    title, _ = _highlight_marked(re.sub(r"\s+", " ", headline))
+    fitted_lines = None
+    for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
+        for size, line_height in s["title_steps"]:
+            font = get_system_font(size, bold=True)
+            lines = wrap_text(title, font, s["title_wrap"])
+            if len(lines) <= max_lines:
+                fitted_lines = lines
+                break
+        if fitted_lines:
+            break
+    if len(lines) > SPOTLIGHT_TITLE_MAX_LINES:
+        lines = lines[:SPOTLIGHT_TITLE_MAX_LINES]
+        last = lines[-1]
+        while last and _text_width(font, last + "…") > s["title_wrap"]:
+            last = last[:-1]
+        lines[-1] = last.rstrip() + "…"
+    y = s["title_bottom"] - (len(lines) - 1) * line_height - size
+    for line in lines:
+        draw_text_safe(draw, (lx, y), line, fill=(255, 255, 255, 255), font=font)
+        y += line_height
+    return image
+
+
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_title: str = None,
                      theme: str = "orange", photo_dir: str = None, canvas: str = DEFAULT_CANVAS,
                      post_photo: Optional[Image.Image] = None,
@@ -1194,6 +1310,9 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_
     if slide_type == "cover":
         return draw_paper_cover(slide, hooking_title, post_photo, article_title=article_title,
                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor)
+    if slide_type == "single" and slide.get("design") == "card2":
+        return draw_spotlight_single(slide, hooking_title, post_photo, article_title=article_title,
+                                     theme=theme, canvas=canvas, photo_anchor=photo_anchor)
     if slide_type == "single":
         return draw_paper_single(slide, hooking_title, post_photo, article_title=article_title,
                                  theme=theme, canvas=canvas, photo_anchor=photo_anchor)
