@@ -6,7 +6,7 @@ import urllib.parse
 from io import BytesIO
 from typing import Optional
 from openai import OpenAI
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -100,7 +100,7 @@ def get_canvas(name: str) -> dict:
 
 # Color themes. The creative agent assigns a theme name at random (independent of
 # the article topic); the renderer uses its key color for the labels, marker
-# strokes and the photo tint.
+# strokes and the block behind each photo.
 THEMES = {
     "orange": {"key": (255, 102, 0, 255)},
     "blue":   {"key": (10, 132, 255, 255)},
@@ -712,7 +712,7 @@ def resolve_user_photo(slide: dict, photo_dir: str) -> Optional[str]:
 
 # --- Newspaper layout ---
 # Every card is a newspaper page: off-white paper, a ruled "TODAY NEWS" header,
-# dark ink copy with marker strokes in the theme color, photos in a tinted box,
+# dark ink copy with marker strokes in the theme color, photos over a theme-color block,
 # and a bottom rule carrying the brand logo.
 PAPER_COLOR = (240, 238, 233)
 PAPER_INK = (26, 26, 28)
@@ -760,14 +760,6 @@ def make_paper_background(width: int, height: int, seed: int) -> Image.Image:
 
     grain = Image.effect_noise((width, height), 22).convert("RGB")
     return Image.blend(base, grain, 0.035)
-
-
-def duotone_photo(photo: Image.Image, key_color: tuple) -> Image.Image:
-    """Recolors a photo into shades of the theme color, like a printed spot color."""
-    gray = ImageOps.autocontrast(ImageOps.grayscale(photo), cutoff=1)
-    dark = _mix(key_color, (0, 0, 0), 0.30)
-    light = _mix(key_color, (255, 255, 255), 0.35)
-    return ImageOps.colorize(gray, dark, light, mid=key_color[:3])
 
 
 def draw_brush_highlight(image: Image.Image, x0: int, y0: int, x1: int, y1: int,
@@ -935,7 +927,7 @@ class PaperPage:
     def photo(self, photo: Image.Image, box: tuple, anchor: float = 0.5, whole: bool = False,
               align: tuple = (0.0, 0.0)) -> tuple:
         """
-        The photo, tinted with the theme color, over an offset block of it.
+        The photo, in its original colors, over an offset block of the theme color.
         By default it fills `box`, cropped around `anchor`. With `whole` the
         entire photo is shown: it is scaled to fit inside `box` and the frame
         shrinks to the photo's own shape, placed by `align` (x, y: 0 = left/top,
@@ -957,7 +949,7 @@ class PaperPage:
             fitted = resize_to_cover(photo, bx1 - bx0, by1 - by0, anchor)
         off = self.p["shadow"]
         self.draw.rectangle([bx0 + off, by0 + off, bx1 + off, by1 + off], fill=self.key)
-        self.image.paste(duotone_photo(fitted, self.key), (bx0, by0))
+        self.image.paste(fitted.convert("RGB"), (bx0, by0))
         return bx0, by0, bx1, by1
 
 
