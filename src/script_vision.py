@@ -50,7 +50,7 @@ CANVASES = {
         # height) steps, body (size, line height), gap between them).
         "spotlight": {
             "label": (80, 46, 24), "circle": (540, 640, 600), "fade": (420, 1180),
-            "center_y": 675, "title_wrap": 940, "body": (34, 52), "body_gap": 34,
+            "center_y": 760, "title_wrap": 940, "body": (34, 52), "body_gap": 34,
             "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
         },
     },
@@ -76,7 +76,7 @@ CANVASES = {
         },
         "spotlight": {
             "label": (140, 60, 26), "circle": (960, 520, 580), "fade": (280, 1040),
-            "center_y": 540, "title_wrap": 1100, "body": (36, 54), "body_gap": 34,
+            "center_y": 600, "title_wrap": 1100, "body": (36, 54), "body_gap": 34,
             "title_steps": ((104, 146), (94, 134), (84, 120), (74, 106)),
         },
     },
@@ -104,7 +104,7 @@ CANVASES = {
         # The headline stays clear of the Shorts UI at the bottom (~350px).
         "spotlight": {
             "label": (80, 150, 26), "circle": (540, 820, 640), "fade": (640, 1560),
-            "center_y": 960, "title_wrap": 940, "body": (36, 54), "body_gap": 36,
+            "center_y": 1060, "title_wrap": 940, "body": (36, 54), "body_gap": 36,
             "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
         },
     },
