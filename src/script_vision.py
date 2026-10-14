@@ -140,13 +140,29 @@ def get_theme(name: str) -> dict:
             return THEMES[key]
     return THEMES[DEFAULT_THEME]
 
+# Brand fonts in the project root: NanumSquare Round ExtraBold for headlines and
+# labels, Regular for body copy.
+BRAND_FONT_BOLD = "NanumSquareRoundEB.ttf"
+BRAND_FONT_REGULAR = "NanumSquareRoundR.ttf"
+
+
 def get_system_font(size: int, bold: bool = False):
     """
     Attempts to load custom fonts placed in the folder first, then loads standard/system fonts.
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     workspace_root = os.path.dirname(current_dir)
-    
+
+    # 0. The brand fonts: headlines in the heavy weight, copy in the regular one.
+    brand_file = BRAND_FONT_BOLD if bold else BRAND_FONT_REGULAR
+    for directory in (workspace_root, current_dir):
+        path = os.path.join(directory, brand_file)
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+
     # 1. Scan for custom font files in the workspace root and src/ directory
     custom_fonts = []
     for directory in [workspace_root, current_dir]:
