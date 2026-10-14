@@ -45,11 +45,12 @@ CANVASES = {
             "single_photo_min": 240,
         },
         # Card 2 (spotlight): label spot, photo circle (center x, center y,
-        # radius), the black fade (start y, fully black y), and the headline
-        # (bottom y, wrap width, (size, line height) steps).
+        # radius), the black fade (start y, fully black y), and the centered
+        # headline + body block (its center y, wrap width, headline (size, line
+        # height) steps, body (size, line height), gap between them).
         "spotlight": {
-            "label": (80, 46, 24), "circle": (540, 640, 600), "fade": (640, 1290),
-            "title_bottom": 1180, "title_wrap": 940,
+            "label": (80, 46, 24), "circle": (540, 640, 600), "fade": (420, 1180),
+            "center_y": 675, "title_wrap": 940, "body": (34, 52), "body_gap": 34,
             "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
         },
     },
@@ -74,8 +75,8 @@ CANVASES = {
             "single_photo_min": 0,
         },
         "spotlight": {
-            "label": (140, 60, 26), "circle": (960, 520, 580), "fade": (500, 1040),
-            "title_bottom": 960, "title_wrap": 1100,
+            "label": (140, 60, 26), "circle": (960, 520, 580), "fade": (280, 1040),
+            "center_y": 540, "title_wrap": 1100, "body": (36, 54), "body_gap": 34,
             "title_steps": ((104, 146), (94, 134), (84, 120), (74, 106)),
         },
     },
@@ -102,8 +103,8 @@ CANVASES = {
         },
         # The headline stays clear of the Shorts UI at the bottom (~350px).
         "spotlight": {
-            "label": (80, 150, 26), "circle": (540, 820, 640), "fade": (900, 1680),
-            "title_bottom": 1560, "title_wrap": 940,
+            "label": (80, 150, 26), "circle": (540, 820, 640), "fade": (640, 1560),
+            "center_y": 960, "title_wrap": 940, "body": (36, 54), "body_gap": 36,
             "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
         },
     },
@@ -1220,6 +1221,7 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
 SPOTLIGHT_BLACK = (8, 8, 10)
 SPOTLIGHT_LABEL = "always good"
 SPOTLIGHT_TITLE_MAX_LINES = 3
+SPOTLIGHT_BODY_MAX_LINES = 2
 SINGLE_DESIGNS = ("card1", "card2")
 
 
@@ -1284,8 +1286,8 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
     lx, ly, lsize = s["label"]
     draw.text((lx, ly), SPOTLIGHT_LABEL, fill=(255, 255, 255, 220), font=get_system_font(lsize))
 
-    # Headline: the biggest step that fits in two lines, else in three, anchored
-    # to the bottom.
+    # Headline: the biggest step that fits in two lines, else in three. It and
+    # the small body lines under it are centered and anchored to the bottom.
     title, _ = _highlight_marked(re.sub(r"\s+", " ", headline))
     fitted_lines = None
     for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
@@ -1297,17 +1299,58 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
                 break
         if fitted_lines:
             break
-    if len(lines) > SPOTLIGHT_TITLE_MAX_LINES:
-        lines = lines[:SPOTLIGHT_TITLE_MAX_LINES]
-        last = lines[-1]
-        while last and _text_width(font, last + "…") > s["title_wrap"]:
-            last = last[:-1]
-        lines[-1] = last.rstrip() + "…"
-    y = s["title_bottom"] - (len(lines) - 1) * line_height - size
+    lines = _cap_rows(lines, SPOTLIGHT_TITLE_MAX_LINES, font, s["title_wrap"])
+
+    # Body: up to two short lines in the regular weight; a '**' line is bold white.
+    body_size, body_line = s["body"]
+    body_rows = []
+    for logical in cover_sub_lines(remove_emojis(slide.get("sub_text") or ""), SPOTLIGHT_BODY_MAX_LINES):
+        clean, has_highlight = strip_highlight_markers(logical)
+        body_font = get_system_font(body_size, bold=has_highlight)
+        color = (255, 255, 255, 255) if has_highlight else (215, 215, 220, 255)
+        body_rows += [(piece, body_font, color) for piece in wrap_text(clean.strip(), body_font, s["title_wrap"])]
+    if len(body_rows) > SPOTLIGHT_BODY_MAX_LINES:
+        body_rows = body_rows[:SPOTLIGHT_BODY_MAX_LINES]
+        text, body_font, color = body_rows[-1]
+        body_rows[-1] = (_ellipsize(text, body_font, s["title_wrap"]), body_font, color)
+
+    # Lay out the block centered on the canvas, then draw it over a soft shadow
+    # so it stays readable on a bright part of the photo.
+    title_h = (len(lines) - 1) * line_height + size
+    body_h = (len(body_rows) - 1) * body_line + body_size + s["body_gap"] if body_rows else 0
+    y = s["center_y"] - (title_h + body_h) // 2
+    placed = []
     for line in lines:
-        draw_text_safe(draw, (lx, y), line, fill=(255, 255, 255, 255), font=font)
+        placed.append(((W - _text_width(font, line)) // 2, y, line, font, (255, 255, 255, 255)))
         y += line_height
+    y += size - line_height + s["body_gap"]
+    for text, body_font, color in body_rows:
+        placed.append(((W - _text_width(body_font, text)) // 2, y, text, body_font, color))
+        y += body_line
+
+    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    s_draw = ImageDraw.Draw(shadow)
+    for x, ty, text, text_font, _ in placed:
+        s_draw.text((x, ty + 4), text, fill=(0, 0, 0, 200), font=text_font)
+    image.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(14)))
+    draw = ImageDraw.Draw(image)
+    for x, ty, text, text_font, color in placed:
+        draw_text_safe(draw, (x, ty), text, fill=color, font=text_font)
     return image
+
+
+def _cap_rows(lines: list, max_lines: int, font, wrap: int) -> list:
+    """Keeps at most `max_lines` rows, ending the last kept one in an ellipsis."""
+    if len(lines) <= max_lines:
+        return lines
+    return lines[:max_lines - 1] + [_ellipsize(lines[max_lines - 1], font, wrap)]
+
+
+def _ellipsize(text: str, font, wrap: int) -> str:
+    """`text` cut short enough to end in '…' within `wrap` pixels."""
+    while text and _text_width(font, text + "…") > wrap:
+        text = text[:-1]
+    return text.rstrip() + "…"
 
 
 def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_title: str = None,

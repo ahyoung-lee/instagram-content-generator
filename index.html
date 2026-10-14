@@ -43,7 +43,7 @@
                     <button id="generate-card2-btn" class="btn-primary btn-one" type="button">Card 2</button>
                 </div>
                 <p class="attach-hint">사진을 첨부하면 그 사진이 <b>표지의 사진칸</b>에 원본 색 그대로 들어갑니다(가로·세로 모두 가능). 첨부하지 않고 생성하면 AI가 사진을 알아서 만들어요.</p>
-                <p class="attach-hint"><b>Card 1</b>을 누르면 여러 장 대신 <b>핵심만 담은 1장짜리 카드뉴스</b>를 만듭니다. 사진 첨부도 똑같이 되며, 첨부한 사진이 그 카드의 사진칸에 들어가요. <b>Card 2</b>는 검은 배경의 <b>동그란 사진</b> 위에 <b>제목만</b> 크게 올린 1장짜리 카드예요. 세로 사진을 첨부하면 가장 잘 어울려요.</p>
+                <p class="attach-hint"><b>Card 1</b>을 누르면 여러 장 대신 <b>핵심만 담은 1장짜리 카드뉴스</b>를 만듭니다. 사진 첨부도 똑같이 되며, 첨부한 사진이 그 카드의 사진칸에 들어가요. <b>Card 2</b>는 검은 배경의 <b>동그란 사진</b> 아래에 제목과 짧은 내용 2줄을 가운데 정렬로 올린 1장짜리 카드예요. 세로 사진을 첨부하면 가장 잘 어울려요.</p>
 
                 <div id="bg-file-row" class="bg-file-row hidden">
                     <img id="bg-file-thumb" class="bg-file-thumb" alt="첨부한 배경 사진 미리보기">
@@ -76,14 +76,14 @@
                 </div>
 
                 <div class="title-edit-container">
-                    <h4 id="title-edit-heading">표지 제목 · 내용 수정</h4>
+                    <h4>표지 제목 · 내용 수정</h4>
                     <div class="title-edit-bar">
                         <input type="text" id="title-edit-input" placeholder="첫 번째 슬라이드의 제목을 입력하세요." aria-label="제목 수정">
                     </div>
                     <textarea id="cover-sub-input" class="cover-sub-input" rows="3"
                         placeholder="제목 바로 아래에 들어갈 내용을 최대 3줄까지 입력하세요. (비워두면 제목만 들어갑니다)"
                         aria-label="표지 내용 수정"></textarea>
-                    <p id="cover-sub-hint" class="insert-hint">한 줄을 <b>**별표 두 개**</b>로 감싸면 그 줄만 강조 색상으로 그려집니다. <b>변경하기</b>를 누르면 제목과 내용이 함께 반영돼요.</p>
+                    <p class="insert-hint">한 줄을 <b>**별표 두 개**</b>로 감싸면 그 줄만 강조 색상으로 그려집니다. <b>변경하기</b>를 누르면 제목과 내용이 함께 반영돼요.</p>
                     <div class="title-edit-actions">
                         <button id="update-title-btn" class="btn-secondary">변경하기</button>
                     </div>

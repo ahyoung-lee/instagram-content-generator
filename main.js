@@ -240,13 +240,16 @@ function resetReelButton() {
 // --- Sub-copy under the title ---
 // On a carousel this box holds the three cover lines. On a one-card post it
 // holds that card's body block, which stretches to five lines when the article
-// has more the reader must not miss. The renderer honours the same caps, so trim
-// anything typed or pasted beyond them: what you see is what the card gets.
+// has more the reader must not miss (two small lines on Card 2). The renderer
+// honours the same caps, so trim anything typed or pasted beyond them: what you
+// see is what the card gets.
 const COVER_SUB_MAX_LINES = 3;
 const SINGLE_BODY_MAX_LINES = 5;
+const CARD2_BODY_MAX_LINES = 2;
 
 function subMaxLines() {
-    return currentPostData.mode === 'single' ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
+    if (currentPostData.mode !== 'single') return COVER_SUB_MAX_LINES;
+    return currentPostData.design === 'card2' ? CARD2_BODY_MAX_LINES : SINGLE_BODY_MAX_LINES;
 }
 
 function clampCoverSub(value) {
@@ -644,6 +647,8 @@ const MODE_COPY = {
     }
 };
 
+const CARD2_SUB_PLACEHOLDER = '제목 아래 작은 글씨로 들어갈 내용입니다. 최대 2줄까지 쓸 수 있어요. (비워두면 제목만 들어갑니다)';
+
 // Reshapes the results area for the format that was just generated. A one-card
 // post has nothing to swipe through, so the reel/YouTube buttons step aside and
 // the 3-second shorts cut takes their place.
@@ -653,21 +658,15 @@ function applyModeUI(mode, design) {
     if (insertHint) insertHint.innerHTML = copy.hint;
 
     const isSingle = mode === 'single';
+    const isCard2 = isSingle && design === 'card2';
 
-    // Card 2 draws the headline only, so the body box has nothing to edit.
-    const titleOnly = isSingle && design === 'card2';
-    const titleEditHeading = document.getElementById('title-edit-heading');
-    const coverSubHint = document.getElementById('cover-sub-hint');
-    if (titleEditHeading) titleEditHeading.textContent = titleOnly ? '제목 수정' : '표지 제목 · 내용 수정';
-    [coverSubInput, coverSubHint].forEach((el) => {
-        if (el) el.classList.toggle('hidden', titleOnly);
-    });
-
-    // The same box takes three cover lines or five one-card body lines, so it
-    // grows and relabels itself with the format.
+    // The same box takes three cover lines, five one-card body lines or Card 2's
+    // two small lines, so it grows and relabels itself with the format.
     if (coverSubInput) {
-        coverSubInput.rows = isSingle ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
-        if (copy.subPlaceholder) coverSubInput.placeholder = copy.subPlaceholder;
+        coverSubInput.rows = isCard2 ? CARD2_BODY_MAX_LINES
+            : isSingle ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
+        const placeholder = isCard2 ? CARD2_SUB_PLACEHOLDER : copy.subPlaceholder;
+        if (placeholder) coverSubInput.placeholder = placeholder;
     }
 
     [reelBtn, reelYtBtn].forEach((btn) => {

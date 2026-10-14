@@ -269,6 +269,11 @@ async def api_generate(
             # photo swap, Shorts cut) keeps drawing it the same way.
             for slide in plan.get("slides", []):
                 slide["design"] = design
+                if design == "card2":
+                    # Card 2 shows only two small lines under the headline.
+                    from src.script_vision import SPOTLIGHT_BODY_MAX_LINES, cover_sub_lines
+                    slide["sub_text"] = "\n".join(
+                        cover_sub_lines(slide.get("sub_text"), SPOTLIGHT_BODY_MAX_LINES))
         else:
             plan = generate_instagram_plan(title, content)
 
@@ -583,12 +588,17 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
             # sub-copy from the card entirely.
             if payload.subtitle is not None:
                 from src.script_vision import (COVER_SUB_MAX_LINES, SINGLE_BODY_MAX_LINES,
-                                               cover_sub_lines)
+                                               SPOTLIGHT_BODY_MAX_LINES, cover_sub_lines)
                 # A one-card post has no cover: the same box holds that
                 # card's body block, which runs to five lines when the
-                # article carries that much the reader must not miss.
-                max_lines = (SINGLE_BODY_MAX_LINES if cover.get("type") == "single"
-                             else COVER_SUB_MAX_LINES)
+                # article carries that much the reader must not miss
+                # (two small lines on Card 2).
+                if cover.get("type") != "single":
+                    max_lines = COVER_SUB_MAX_LINES
+                elif cover.get("design") == "card2":
+                    max_lines = SPOTLIGHT_BODY_MAX_LINES
+                else:
+                    max_lines = SINGLE_BODY_MAX_LINES
                 sub_text = "\n".join(cover_sub_lines(payload.subtitle, max_lines))
                 if sub_text:
                     cover["sub_text"] = sub_text
