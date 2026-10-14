@@ -220,31 +220,26 @@ async def api_generate(
         os.makedirs(post_dir, exist_ok=True)
         plan_file = os.path.join(post_dir, "plan.json")
 
-        # Check if cache exists and matches the requested URL for background image reuse
+        # The same URL again (same day, same format) always reuses the post's
+        # photo, so only the copy is rewritten and the paid image API is skipped.
         reuse_background = False
         request_count = 1
+        cached_article_url = None
         if os.path.exists(plan_file):
             try:
                 with open(plan_file, "r", encoding="utf-8") as f:
                     cached_data = json.load(f)
 
-                cached_req_url = cached_data.get("requested_url")
-                if cached_req_url == url:
-                    prev_count = cached_data.get("request_count", 1)
-                    request_count = prev_count + 1
-                    
-                    # If request_count is even (2nd, 4th, etc. request), reuse the background image
-                    if request_count % 2 == 0:
-                        reuse_background = True
-                        print(f"Same URL requested (count {request_count}). Will reuse background image.")
-                    else:
-                        reuse_background = False
-                        print(f"Same URL requested (count {request_count}). Generating a NEW background image.")
+                if cached_data.get("requested_url") == url:
+                    request_count = cached_data.get("request_count", 1) + 1
+                    cached_article_url = cached_data.get("url")
+                    reuse_background = True
+                    print(f"Same URL requested (count {request_count}). Will reuse the background image.")
             except Exception as cache_err:
                 print(f"Error reading cache plan.json for background check: {cache_err}")
 
-        # An attached photo becomes the background master and is always reused,
-        # which also bypasses the parity rule above (and the paid image API).
+        # An attached photo becomes the background master and is always reused
+        # (no paid image API call).
         if custom_bg_bytes:
             from src.script_vision import save_background_master
             save_background_master(custom_bg_bytes, post_dir)
@@ -261,7 +256,12 @@ async def api_generate(
         title = trend_result.get("title", "Trending")
         content = trend_result.get("content", "")
         scraped_url = trend_result.get("url", "N/A")
-        
+
+        # With no URL the trending story can change between presses; the old
+        # photo only carries over when it is still the same article.
+        if url is None and not custom_bg_bytes and scraped_url != cached_article_url:
+            reuse_background = False
+
         # Step 2: Use LLM agent to create structured slide copy and captions
         if mode == "single":
             plan = generate_single_card_plan(title, content)
