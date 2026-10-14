@@ -989,6 +989,15 @@ class PaperPage:
         return bx0, by0, bx1, by1
 
 
+def _headline_text(title: str) -> str:
+    """
+    Collapses whitespace in a headline, except that a typed '<br>' (also
+    '<br/>', '<br />') becomes a forced line break.
+    """
+    parts = re.split(r"\s*<br\s*/?>\s*", title or "", flags=re.IGNORECASE)
+    return "\n".join(re.sub(r"\s+", " ", part).strip() for part in parts).strip("\n")
+
+
 def _headline_rows(title: str, steps, wrap: int, fits, default_last: bool) -> tuple:
     """
     Wraps a headline at the largest step that keeps it to four lines and makes
@@ -996,7 +1005,7 @@ def _headline_rows(title: str, steps, wrap: int, fits, default_last: bool) -> tu
     in an ellipsis. '**' words get a marker stroke; without any, the last line
     does when `default_last` is set. Returns (rows, step).
     """
-    title, marked = _highlight_marked(re.sub(r"\s+", " ", title))
+    title, marked = _highlight_marked(_headline_text(title))
     for step in steps:
         font = get_system_font(step[0], bold=True)
         lines = wrap_text(title, font, wrap)
@@ -1288,7 +1297,7 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
 
     # Headline: the biggest step that fits in two lines, else in three. It and
     # the small body lines under it are centered and anchored to the bottom.
-    title, _ = _highlight_marked(re.sub(r"\s+", " ", headline))
+    title, _ = _highlight_marked(_headline_text(headline))
     fitted_lines = None
     for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
         for size, line_height in s["title_steps"]:
