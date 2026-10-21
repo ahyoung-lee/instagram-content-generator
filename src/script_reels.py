@@ -22,9 +22,9 @@ PRESETS = {
                    "seconds": 2.0},
     # Shorts cut of a one-card post: the card is redrawn on a native 9:16 canvas
     # (see the "story" canvas), so it fills the frame with no blurred bands, and
-    # it holds for the three seconds a Shorts clip needs.
+    # it holds for nine seconds so the copy has time to be read.
     "shorts":     {"size": (720, 1280), "filename": "shorts.mp4",   "label": "9:16 쇼츠",
-                   "seconds": 3.0, "first_seconds": 3.0},
+                   "seconds": 9.0, "first_seconds": 9.0},
 }
 FPS = 30
 

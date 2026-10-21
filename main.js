@@ -651,7 +651,7 @@ const CARD2_SUB_PLACEHOLDER = '제목 아래 작은 글씨로 들어갈 내용�
 
 // Reshapes the results area for the format that was just generated. A one-card
 // post has nothing to swipe through, so the reel/YouTube buttons step aside and
-// the 3-second shorts cut takes their place.
+// the 9-second shorts cut takes their place.
 function applyModeUI(mode, design) {
     const copy = MODE_COPY[mode] || MODE_COPY.carousel;
     if (previewHeading) previewHeading.textContent = copy.heading;
@@ -978,7 +978,7 @@ reelYtBtn.addEventListener('click', () => buildVideo({
     downloadName: 'youtube.mp4'
 }));
 
-// The one-card post's 3-second 9:16 cut for Shorts/Reels.
+// The one-card post's 9-second 9:16 cut for Shorts/Reels.
 if (shortsBtn) {
     shortsBtn.addEventListener('click', () => buildVideo({
         orientation: 'shorts',
