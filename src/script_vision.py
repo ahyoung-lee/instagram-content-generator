@@ -1297,7 +1297,8 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
 
     # Headline: the biggest step that fits in two lines, else in three. It and
     # the small body lines under it are centered and anchored to the bottom.
-    title, _ = _highlight_marked(_headline_text(headline))
+    # '**' words are painted in the theme's key color.
+    title, marked = _highlight_marked(_headline_text(headline))
     fitted_lines = None
     for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
         for size, line_height in s["title_steps"]:
@@ -1328,13 +1329,25 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
     title_h = (len(lines) - 1) * line_height + size
     body_h = (len(body_rows) - 1) * body_line + body_size + s["body_gap"] if body_rows else 0
     y = s["center_y"] - (title_h + body_h) // 2
-    placed = []
+    white, accent = (255, 255, 255, 255), key + (255,)
+    placed, cursor = [], 0
     for line in lines:
-        placed.append(((W - _text_width(font, line)) // 2, y, line, font, (255, 255, 255, 255)))
+        # Each line is split into runs of (start, end, color) by its marked characters.
+        pos = title.find(line.rstrip("…"), cursor)
+        if pos >= 0:
+            cursor = pos + len(line.rstrip("…"))
+        runs = []
+        for i, ch in enumerate(line):
+            color = accent if pos >= 0 and pos + i in marked and ch != "…" else white
+            if runs and runs[-1][2] == color:
+                runs[-1] = (runs[-1][0], i + 1, color)
+            else:
+                runs.append((i, i + 1, color))
+        placed.append(((W - _text_width(font, line)) // 2, y, line, font, runs))
         y += line_height
     y += size - line_height + s["body_gap"]
     for text, body_font, color in body_rows:
-        placed.append(((W - _text_width(body_font, text)) // 2, y, text, body_font, color))
+        placed.append(((W - _text_width(body_font, text)) // 2, y, text, body_font, [(0, len(text), color)]))
         y += body_line
 
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -1343,8 +1356,10 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
         s_draw.text((x, ty + 4), text, fill=(0, 0, 0, 200), font=text_font)
     image.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(14)))
     draw = ImageDraw.Draw(image)
-    for x, ty, text, text_font, color in placed:
-        draw_text_safe(draw, (x, ty), text, fill=color, font=text_font)
+    for x, ty, text, text_font, runs in placed:
+        for start, end, color in runs:
+            rx = x + (_text_width(text_font, text[:start]) if start else 0)
+            draw_text_safe(draw, (rx, ty), text[start:end], fill=color, font=text_font)
     return image
 
 
