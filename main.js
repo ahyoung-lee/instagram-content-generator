@@ -8,7 +8,8 @@ let currentPostData = {
     subtitle: '',      // up to 3 lines drawn under the cover title
     theme: '',         // accent color: rolled at random, then user-selectable
     mode: 'carousel',  // 'carousel' = multi-card deck, 'single' = one-card post
-    design: 'card1'    // one-card look: 'card1' newspaper, 'card2' circle photo on black
+    design: 'card1',   // one-card look: 'card1' newspaper, 'card2' circle photo on black
+    title_color: 'white'  // Card 2 headline: 'white' or an accent color name
 };
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
@@ -160,6 +161,8 @@ const titleEditInput = document.getElementById('title-edit-input');
 const coverSubInput = document.getElementById('cover-sub-input');
 const updateTitleBtn = document.getElementById('update-title-btn');
 const themeSwatches = document.getElementById('theme-swatches');
+const titleColorContainer = document.getElementById('title-color-container');
+const titleColorSwatches = document.getElementById('title-color-swatches');
 const saveBtn = document.getElementById('save-btn');
 const previewHeading = document.getElementById('preview-heading');
 const insertHint = document.getElementById('insert-hint');
@@ -362,6 +365,66 @@ async function applyTheme(theme) {
     } catch (error) {
         console.error(error);
         alert(`색상 변경 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        loadingOverlay.classList.add('hidden');
+    }
+}
+
+// --- Card 2 headline color picker ---
+// White (the default) or any accent color, painted on the Card 2 headline only.
+
+async function renderTitleColorPicker() {
+    const isCard2 = currentPostData.mode === 'single' && currentPostData.design === 'card2';
+    if (titleColorContainer) titleColorContainer.classList.toggle('hidden', !isCard2);
+    if (!titleColorSwatches || !isCard2) return;
+    const themes = await loadThemes();
+    const options = [{ name: 'white', hex: '#ffffff' }].concat(themes);
+    titleColorSwatches.innerHTML = '';
+    options.forEach(({ name, hex }) => {
+        const label = name === 'white' ? '흰색' : (THEME_LABELS[name] || name);
+        const active = name === currentPostData.title_color;
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'theme-swatch';
+        chip.style.background = hex;
+        chip.title = label;
+        chip.setAttribute('aria-label', '제목을 ' + label + '으로 변경');
+        chip.setAttribute('aria-pressed', String(active));
+        chip.classList.toggle('active', active);
+        chip.addEventListener('click', () => applyTitleColor(name));
+        titleColorSwatches.appendChild(chip);
+    });
+}
+
+async function applyTitleColor(titleColor) {
+    if (!currentPostData.date_str) {
+        alert('먼저 콘텐츠를 생성해 주세요.');
+        return;
+    }
+    if (titleColor === currentPostData.title_color) return;
+
+    loadingOverlay.classList.remove('hidden');
+    try {
+        const response = await apiFetch('/api/update_title_color', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date_str: currentPostData.date_str, title_color: titleColor })
+        });
+        if (!response.ok) {
+            let msg = `서버 에러 (상태 코드: ${response.status})`;
+            try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+            throw new Error(msg);
+        }
+        const data = await response.json();
+        if (data.success) {
+            currentPostData.title_color = data.title_color || titleColor;
+            renderTitleColorPicker();
+            renderSlidesPreview(data.image_urls, data.photo_slides);
+            resetReelButton();
+        }
+    } catch (error) {
+        console.error(error);
+        alert(`제목 색상 변경 중 오류가 발생했습니다: ${error.message}`);
     } finally {
         loadingOverlay.classList.add('hidden');
     }
@@ -719,8 +782,11 @@ async function runGenerate(mode, design = 'card1') {
             // The accent color the backend rolled for this post, so the picker
             // can show which chip is currently in use.
             currentPostData.theme = (data.plan && data.plan.theme) || '';
+            const firstSlide = (data.plan && data.plan.slides && data.plan.slides[0]) || {};
+            currentPostData.title_color = firstSlide.title_color || 'white';
             applyModeUI(currentPostData.mode, currentPostData.design);
             renderThemePicker();
+            renderTitleColorPicker();
 
             // Populate UI Elements
             dateBadge.textContent = data.date_str.split('/')[0];

@@ -1324,12 +1324,19 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
         text, body_font, color = body_rows[-1]
         body_rows[-1] = (_ellipsize(text, body_font, s["title_wrap"]), body_font, color)
 
-    # Lay out the block centered on the canvas, then draw it over a soft shadow
-    # so it stays readable on a bright part of the photo.
+    # Lay out the block centered on the canvas, then draw it over a tight, dark
+    # shadow so it stays readable on a bright part of the photo.
     title_h = (len(lines) - 1) * line_height + size
     body_h = (len(body_rows) - 1) * body_line + body_size + s["body_gap"] if body_rows else 0
     y = s["center_y"] - (title_h + body_h) // 2
+    # The headline is white unless the user picked an accent color for it; when
+    # that is the theme color itself, the '**' words flip to white to stand out.
     white, accent = (255, 255, 255, 255), key + (255,)
+    base = white
+    if slide.get("title_color") in THEMES:
+        base = THEMES[slide["title_color"]]["key"][:3] + (255,)
+        if base == accent:
+            accent = white
     placed, cursor = [], 0
     for line in lines:
         # Each line is split into runs of (start, end, color) by its marked characters.
@@ -1338,7 +1345,7 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
             cursor = pos + len(line.rstrip("…"))
         runs = []
         for i, ch in enumerate(line):
-            color = accent if pos >= 0 and pos + i in marked and ch != "…" else white
+            color = accent if pos >= 0 and pos + i in marked and ch != "…" else base
             if runs and runs[-1][2] == color:
                 runs[-1] = (runs[-1][0], i + 1, color)
             else:
@@ -1353,8 +1360,8 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     s_draw = ImageDraw.Draw(shadow)
     for x, ty, text, text_font, _ in placed:
-        s_draw.text((x, ty + 4), text, fill=(0, 0, 0, 200), font=text_font)
-    image.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(14)))
+        s_draw.text((x + 2, ty + 3), text, fill=(0, 0, 0, 255), font=text_font)
+    image.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(4)))
     draw = ImageDraw.Draw(image)
     for x, ty, text, text_font, runs in placed:
         for start, end, color in runs:

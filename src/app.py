@@ -64,6 +64,10 @@ class UpdateThemeRequest(BaseModel):
     date_str: str
     theme: str
 
+class UpdateTitleColorRequest(BaseModel):
+    date_str: str
+    title_color: str   # "white" or one of the THEMES names
+
 class PrepareDownloadRequest(BaseModel):
     date_str: str
     caption: str
@@ -696,6 +700,43 @@ def api_update_theme(payload: UpdateThemeRequest, x_access_key: Optional[str] = 
     except Exception as e:
         import traceback
         print(f"Update theme error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/update_title_color")
+def api_update_title_color(payload: UpdateTitleColorRequest, x_access_key: Optional[str] = Header(default=None)):
+    """
+    Repaints the Card 2 headline in white or one of the accent colors.
+
+    The color rides on the Card 2 slide, so later redraws keep it. Like a theme
+    change, the copy and photo are reused and no paid API call is made.
+    """
+    verify_access(x_access_key)
+    try:
+        from src.script_vision import THEMES
+        title_color = (payload.title_color or "").strip().lower()
+        if title_color != "white" and title_color not in THEMES:
+            raise HTTPException(status_code=400, detail=f"알 수 없는 제목 색상입니다: {payload.title_color}")
+
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        data = _load_plan_data(post_dir)
+        card2 = [s for s in data.get("plan", {}).get("slides", []) if s.get("design") == "card2"]
+        if not card2:
+            raise HTTPException(status_code=400, detail="제목 색상은 Card 2에서만 바꿀 수 있어요.")
+        for slide in card2:
+            slide["title_color"] = title_color
+        _save_plan_data(post_dir, data)
+
+        result = _rerender_response(payload.date_str, post_dir, data)
+        result["title_color"] = title_color
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Update title color error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/prepare_download")
