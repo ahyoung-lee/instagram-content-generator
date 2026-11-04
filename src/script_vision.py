@@ -42,7 +42,7 @@ CANVASES = {
             "photo_min": 300, "photo_max": 560, "photo_gap": 44,
             # (headline size, headline line, body size, body line)
             "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
-            "single_photo_min": 240,
+            "single_photo_min": 440,
         },
         # Card 2 (spotlight): label spot, photo circle (center x, center y,
         # radius), the black fade (start y, fully black y), and the centered
@@ -99,7 +99,7 @@ CANVASES = {
             "cta": (50, 80), "cta_photo": (40, 62), "min_line": 46,
             "photo_min": 320, "photo_max": 620, "photo_gap": 44,
             "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
-            "single_photo_min": 260,
+            "single_photo_min": 520,
         },
         # The headline stays clear of the Shorts UI at the bottom (~350px).
         "spotlight": {
@@ -1179,8 +1179,9 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
                       photo_anchor: Optional[float] = 0.5) -> Image.Image:
     """
     The one-card post: "오늘의 한 장" label, a headline of up to four lines, the
-    photo box, and the body block (up to five lines, one highlighted) at the
-    bottom. Wide canvases put the photo in a column beside the copy.
+    body block (about four lines, one highlighted) right under it, and the
+    photo filling the rest of the page down to the bottom. Wide canvases put
+    the photo in a column beside the copy.
     """
     headline = remove_emojis((slide.get("main_text") or "").strip())
     if not headline:
@@ -1196,8 +1197,9 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     page.badge("오늘의 한 장", m, y)
     y += p["badge_h"] + p["badge_gap"]
     bottom = p["body_bottom"]
-    title_gap, photo_gap = 36, p["photo_gap"]
     in_column = photo is not None and not page.side_photo
+    # Tighter gaps when the photo sits under the copy, so it gets the room.
+    title_gap, photo_gap = (30, 34) if in_column else (36, p["photo_gap"])
     photo_room = p["single_photo_min"] + p["shadow"] + photo_gap if in_column else 0
     wrap = p["title_wrap"] if page.side_photo else p["card_wrap"]
 
@@ -1210,11 +1212,12 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     y = page.lines(rows, m, y, step[1]) + title_gap
 
     if in_column:
-        # Body anchored to the bottom; the photo takes everything in between.
-        body_y = max(y + photo_room, bottom - len(body_rows) * step[3])
-        page.photo(photo, (m, y, page.W - m, body_y - photo_gap - p["shadow"]), photo_anchor or 0.5,
-                   whole=photo_anchor is None, align=(0.0, 0.5))
-        page.lines(body_rows, m, body_y, step[3])
+        # Body right under the headline; the photo takes everything below it,
+        # down to the bottom of the page.
+        body_end = page.lines(body_rows, m, y, step[3])
+        photo_top = body_end + photo_gap
+        page.photo(photo, (m, photo_top, page.W - m, bottom - p["shadow"]), photo_anchor or 0.5,
+                   whole=photo_anchor is None, align=(0.5, 1.0))
     else:
         if photo is not None:
             page.photo(photo, p["photo_box"], photo_anchor or 0.5,
