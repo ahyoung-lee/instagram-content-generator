@@ -180,7 +180,8 @@ async def api_generate(
     `mode` picks the format: "carousel" is the multi-card deck, "single" is the
     one-card post whose headline and short body block share one image.
     `design` picks the one-card look: "card1" is the newspaper page, "card2"
-    the photo-in-a-circle on black with the headline only.
+    the photo-in-a-circle on black with the headline only, "card3" the full
+    photo with the headline on color bars.
 
     An optional `background` photo replaces the AI-generated cover artwork: the
     uploaded image becomes this post's background master, so no paid image call
@@ -278,6 +279,11 @@ async def api_generate(
                     from src.script_vision import SPOTLIGHT_BODY_MAX_LINES, cover_sub_lines
                     slide["sub_text"] = "\n".join(
                         cover_sub_lines(slide.get("sub_text"), SPOTLIGHT_BODY_MAX_LINES))
+                elif design == "card3":
+                    # Card 3 is the headline on color bars over the photo, with
+                    # no body copy. The bars start out yellow.
+                    slide.pop("sub_text", None)
+                    slide["title_color"] = "yellow"
         else:
             plan = generate_instagram_plan(title, content)
 
@@ -601,6 +607,8 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
                     max_lines = COVER_SUB_MAX_LINES
                 elif cover.get("design") == "card2":
                     max_lines = SPOTLIGHT_BODY_MAX_LINES
+                elif cover.get("design") == "card3":
+                    max_lines = 0  # Card 3 is the headline only
                 else:
                     max_lines = SINGLE_BODY_MAX_LINES
                 sub_text = "\n".join(cover_sub_lines(payload.subtitle, max_lines))
@@ -705,7 +713,8 @@ def api_update_theme(payload: UpdateThemeRequest, x_access_key: Optional[str] = 
 @app.post("/api/update_title_color")
 def api_update_title_color(payload: UpdateTitleColorRequest, x_access_key: Optional[str] = Header(default=None)):
     """
-    Repaints the Card 2 headline in white or one of the accent colors.
+    Repaints the Card 2 headline (or the Card 3 headline bars) in white or one
+    of the accent colors.
 
     The color rides on the Card 2 slide, so later redraws keep it. Like a theme
     change, the copy and photo are reused and no paid API call is made.
@@ -722,10 +731,11 @@ def api_update_title_color(payload: UpdateTitleColorRequest, x_access_key: Optio
             raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
 
         data = _load_plan_data(post_dir)
-        card2 = [s for s in data.get("plan", {}).get("slides", []) if s.get("design") == "card2"]
-        if not card2:
-            raise HTTPException(status_code=400, detail="제목 색상은 Card 2에서만 바꿀 수 있어요.")
-        for slide in card2:
+        colored = [s for s in data.get("plan", {}).get("slides", [])
+                   if s.get("design") in ("card2", "card3")]
+        if not colored:
+            raise HTTPException(status_code=400, detail="제목 색상은 Card 2·3에서만 바꿀 수 있어요.")
+        for slide in colored:
             slide["title_color"] = title_color
         _save_plan_data(post_dir, data)
 

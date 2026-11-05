@@ -8,8 +8,9 @@ let currentPostData = {
     subtitle: '',      // up to 3 lines drawn under the cover title
     theme: '',         // accent color: rolled at random, then user-selectable
     mode: 'carousel',  // 'carousel' = multi-card deck, 'single' = one-card post
-    design: 'card1',   // one-card look: 'card1' newspaper, 'card2' circle photo on black
-    title_color: 'white'  // Card 2 headline: 'white' or an accent color name
+    design: 'card1',   // one-card look: 'card1' newspaper, 'card2' circle photo on black,
+                       // 'card3' full photo with the headline on color bars
+    title_color: 'white'  // Card 2 headline / Card 3 bar: 'white' or an accent color name
 };
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
@@ -252,6 +253,7 @@ const CARD2_BODY_MAX_LINES = 2;
 
 function subMaxLines() {
     if (currentPostData.mode !== 'single') return COVER_SUB_MAX_LINES;
+    if (currentPostData.design === 'card3') return 0;  // headline only
     return currentPostData.design === 'card2' ? CARD2_BODY_MAX_LINES : SINGLE_BODY_MAX_LINES;
 }
 
@@ -370,13 +372,29 @@ async function applyTheme(theme) {
     }
 }
 
-// --- Card 2 headline color picker ---
-// White (the default) or any accent color, painted on the Card 2 headline only.
+// --- Card 2 headline color / Card 3 headline bar color picker ---
+// White or any accent color: the Card 2 headline text (white by default) or
+// the Card 3 bars behind the headline (yellow by default).
+const TITLE_COLOR_COPY = {
+    card2: {
+        heading: 'Card 2 제목 색상',
+        hint: '제목 글씨 색을 <b>흰색</b>이나 강조 색상 중에서 고를 수 있어요. 강조 색상과 같은 색을 고르면 <b>**별표**</b> 단어는 흰색으로 바뀝니다. (추가 비용 없음)'
+    },
+    card3: {
+        heading: 'Card 3 제목 배경색',
+        hint: '제목 뒤에 깔리는 <b>띠 색</b>을 고를 수 있어요. 밝은 색에는 검은 글씨, 어두운 색에는 흰 글씨가 들어갑니다. (추가 비용 없음)'
+    }
+};
 
 async function renderTitleColorPicker() {
-    const isCard2 = currentPostData.mode === 'single' && currentPostData.design === 'card2';
-    if (titleColorContainer) titleColorContainer.classList.toggle('hidden', !isCard2);
-    if (!titleColorSwatches || !isCard2) return;
+    const design = currentPostData.mode === 'single' ? currentPostData.design : '';
+    const copy = TITLE_COLOR_COPY[design];
+    if (titleColorContainer) titleColorContainer.classList.toggle('hidden', !copy);
+    if (!titleColorSwatches || !copy) return;
+    const heading = document.getElementById('title-color-heading');
+    const hint = document.getElementById('title-color-hint');
+    if (heading) heading.textContent = copy.heading;
+    if (hint) hint.innerHTML = copy.hint;
     const themes = await loadThemes();
     const options = [{ name: 'white', hex: '#ffffff' }].concat(themes);
     titleColorSwatches.innerHTML = '';
@@ -388,7 +406,7 @@ async function renderTitleColorPicker() {
         chip.className = 'theme-swatch';
         chip.style.background = hex;
         chip.title = label;
-        chip.setAttribute('aria-label', '제목을 ' + label + '으로 변경');
+        chip.setAttribute('aria-label', (design === 'card3' ? '제목 배경을 ' : '제목을 ') + label + '으로 변경');
         chip.setAttribute('aria-pressed', String(active));
         chip.classList.toggle('active', active);
         chip.addEventListener('click', () => applyTitleColor(name));
@@ -722,6 +740,7 @@ function applyModeUI(mode, design) {
 
     const isSingle = mode === 'single';
     const isCard2 = isSingle && design === 'card2';
+    const isCard3 = isSingle && design === 'card3';
 
     // The same box takes three cover lines, five one-card body lines or Card 2's
     // two small lines, so it grows and relabels itself with the format.
@@ -730,6 +749,8 @@ function applyModeUI(mode, design) {
             : isSingle ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
         const placeholder = isCard2 ? CARD2_SUB_PLACEHOLDER : copy.subPlaceholder;
         if (placeholder) coverSubInput.placeholder = placeholder;
+        // Card 3 is the headline only, so there is no body box to fill.
+        coverSubInput.classList.toggle('hidden', isCard3);
     }
 
     [reelBtn, reelYtBtn].forEach((btn) => {
@@ -832,6 +853,11 @@ if (generateOneBtn) {
 const generateCard2Btn = document.getElementById('generate-card2-btn');
 if (generateCard2Btn) {
     generateCard2Btn.addEventListener('click', () => runGenerate('single', 'card2'));
+}
+// Card 3: the photo fills the card, the headline sits on color bars.
+const generateCard3Btn = document.getElementById('generate-card3-btn');
+if (generateCard3Btn) {
+    generateCard3Btn.addEventListener('click', () => runGenerate('single', 'card3'));
 }
 
 // 2. Copy Caption to Clipboard

@@ -41,9 +41,10 @@
                 <div class="card-buttons">
                     <button id="generate-one-btn" class="btn-primary btn-one" type="button">Card 1</button>
                     <button id="generate-card2-btn" class="btn-primary btn-one" type="button">Card 2</button>
+                    <button id="generate-card3-btn" class="btn-primary btn-one" type="button">Card 3</button>
                 </div>
                 <p class="attach-hint">사진을 첨부하면 그 사진이 <b>표지의 사진칸</b>에 원본 색 그대로 들어갑니다(가로·세로 모두 가능). 첨부하지 않고 생성하면 AI가 사진을 알아서 만들어요.</p>
-                <p class="attach-hint"><b>Card 1</b>을 누르면 여러 장 대신 <b>핵심만 담은 1장짜리 카드뉴스</b>를 만듭니다. 사진 첨부도 똑같이 되며, 첨부한 사진이 그 카드의 사진칸에 들어가요. <b>Card 2</b>는 검은 배경의 <b>동그란 사진</b> 아래에 제목과 짧은 내용 2줄을 가운데 정렬로 올린 1장짜리 카드예요. 세로 사진을 첨부하면 가장 잘 어울려요.</p>
+                <p class="attach-hint"><b>Card 1</b>을 누르면 여러 장 대신 <b>핵심만 담은 1장짜리 카드뉴스</b>를 만듭니다. 사진 첨부도 똑같이 되며, 첨부한 사진이 그 카드의 사진칸에 들어가요. <b>Card 2</b>는 검은 배경의 <b>동그란 사진</b> 아래에 제목과 짧은 내용 2줄을 가운데 정렬로 올린 1장짜리 카드예요. 세로 사진을 첨부하면 가장 잘 어울려요. <b>Card 3</b>은 첨부한 사진(없으면 AI 사진)이 <b>카드 전체 배경</b>으로 깔리고, 왼쪽 아래에 <b>노란 띠 위 검은 제목</b>이 들어가는 1장짜리 카드예요. 띠 색은 생성 후 바꿀 수 있어요.</p>
 
                 <div id="bg-file-row" class="bg-file-row hidden">
                     <img id="bg-file-thumb" class="bg-file-thumb" alt="첨부한 배경 사진 미리보기">
@@ -76,8 +77,8 @@
                 </div>
 
                 <div id="title-color-container" class="theme-picker-container hidden">
-                    <h4>Card 2 제목 색상</h4>
-                    <p class="insert-hint">제목 글씨 색을 <b>흰색</b>이나 강조 색상 중에서 고를 수 있어요. 강조 색상과 같은 색을 고르면 <b>**별표**</b> 단어는 흰색으로 바뀝니다. (추가 비용 없음)</p>
+                    <h4 id="title-color-heading">Card 2 제목 색상</h4>
+                    <p class="insert-hint" id="title-color-hint">제목 글씨 색을 <b>흰색</b>이나 강조 색상 중에서 고를 수 있어요. 강조 색상과 같은 색을 고르면 <b>**별표**</b> 단어는 흰색으로 바뀝니다. (추가 비용 없음)</p>
                     <div id="title-color-swatches" class="theme-swatches"></div>
                 </div>
 

@@ -1234,7 +1234,7 @@ SPOTLIGHT_BLACK = (8, 8, 10)
 SPOTLIGHT_LABEL = "always good"
 SPOTLIGHT_TITLE_MAX_LINES = 3
 SPOTLIGHT_BODY_MAX_LINES = 2
-SINGLE_DESIGNS = ("card1", "card2")
+SINGLE_DESIGNS = ("card1", "card2", "card3")
 
 
 def _radial_mask(diameter: int, curve) -> Image.Image:
@@ -1373,6 +1373,110 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
     return image
 
 
+# --- Card 3: full-photo layout ---
+# The photo fills the whole 4:5 card; an "always good" tag sits top-left (white
+# on black) and the headline is left-aligned near the bottom in black type on
+# solid color bars, one bar per line. The bar color is the slide's title_color
+# (yellow by default). On the 9:16 Shorts canvas the 4:5 card sits in the
+# middle with white above and below.
+CARD3_TITLE_MAX_LINES = 3
+CARD3_DEFAULT_BAR = "yellow"
+CARD3_INK = (12, 12, 12, 255)
+
+
+CARD3_BRIGHT_YELLOW = (255, 236, 0, 255)  # the default bar, brighter than the theme yellow
+
+
+def _card3_bar_color(name: Optional[str]) -> tuple:
+    if name == "white":
+        return (255, 255, 255, 255)
+    if (name or CARD3_DEFAULT_BAR) == CARD3_DEFAULT_BAR:
+        return CARD3_BRIGHT_YELLOW
+    return THEMES.get(name or CARD3_DEFAULT_BAR, THEMES[CARD3_DEFAULT_BAR])["key"][:3] + (255,)
+
+
+def draw_photo_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
+                      article_title: str = None, theme: str = "orange",
+                      canvas: str = DEFAULT_CANVAS,
+                      photo_anchor: Optional[float] = 0.5) -> Image.Image:
+    """Card 3: full-bleed photo, headline on color bars at the bottom left."""
+    if canvas == "story":
+        # Shorts: the 4:5 card centered on a white 9:16 frame.
+        card = draw_photo_single(slide, hooking_title, photo, article_title=article_title,
+                                 theme=theme, canvas=DEFAULT_CANVAS, photo_anchor=photo_anchor)
+        W, H = get_canvas("story")["size"]
+        frame = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+        frame.paste(card, ((W - card.width) // 2, (H - card.height) // 2))
+        return frame
+
+    headline = remove_emojis((slide.get("main_text") or "").strip())
+    if not headline:
+        headline = remove_emojis((article_title or hooking_title or "").strip())
+    W, H = get_canvas(canvas)["size"]
+    unit = W / 1080 if W <= H else H / 1350  # scale for the wide canvas
+    margin = int(80 * unit)
+
+    if photo is not None:
+        # Fill the card edge to edge; an uncropped upload is kept a little
+        # toward the top, where faces and subjects usually are.
+        fitted = resize_to_cover(photo, W, H, 0.35 if photo_anchor is None else photo_anchor)
+        image = fitted.convert("RGBA")
+    else:
+        image = Image.new("RGBA", (W, H), _mix(get_theme(theme)["key"][:3], (235, 235, 235), 0.55) + (255,))
+    draw = ImageDraw.Draw(image)
+
+    # "always good" tag, top-left: white letters on a black box.
+    tag_font = get_system_font(int(30 * unit), bold=True)
+    tag_pad_x, tag_pad_y = int(18 * unit), int(10 * unit)
+    tx, ty = margin, int(70 * unit)
+    if hasattr(tag_font, "getbbox"):
+        _, t_top, _, t_bottom = tag_font.getbbox(SPOTLIGHT_LABEL)
+    else:
+        t_top, t_bottom = 0, int(30 * unit)
+    tag_w = _text_width(tag_font, SPOTLIGHT_LABEL)
+    draw.rectangle([tx, ty, tx + tag_w + tag_pad_x * 2, ty + (t_bottom - t_top) + tag_pad_y * 2],
+                   fill=(0, 0, 0, 255))
+    draw.text((tx + tag_pad_x, ty + tag_pad_y - t_top), SPOTLIGHT_LABEL,
+              fill=(255, 255, 255, 255), font=tag_font)
+
+    # Headline: the biggest size that fits in two lines, else three.
+    title, _ = _highlight_marked(_headline_text(headline))
+    wrap = W - margin * 2 - int(40 * unit)
+    steps = [int(v * unit) for v in (92, 84, 76, 68, 60)]
+    lines, font = None, None
+    for max_lines in (2, CARD3_TITLE_MAX_LINES):
+        for size in steps:
+            font = get_system_font(size, bold=True)
+            candidate = wrap_text(title, font, wrap)
+            if len(candidate) <= max_lines:
+                lines = candidate
+                break
+        if lines:
+            break
+    if not lines:
+        lines = _cap_rows(candidate, CARD3_TITLE_MAX_LINES, font, wrap)
+
+    # One bar per line, hugging its text, stacked without a gap and anchored
+    # to the bottom of the card.
+    bar = _card3_bar_color(slide.get("title_color"))
+    # Black type on light bars (yellow, white), white type on dark ones.
+    ink = CARD3_INK if _badge_text_color(bar) != (255, 255, 255, 255) else (255, 255, 255, 255)
+    if hasattr(font, "getbbox"):
+        _, g_top, _, g_bottom = font.getbbox("가Ag%")
+    else:
+        g_top, g_bottom = 0, font.size
+    pad_x, pad_y = int(14 * unit), int(16 * unit)
+    bar_h = (g_bottom - g_top) + pad_y * 2
+    bottom = H - int(185 * unit)
+    y = bottom - bar_h * len(lines)
+    for line in lines:
+        line_w = _text_width(font, line)
+        draw.rectangle([margin, y, margin + line_w + pad_x * 2, y + bar_h], fill=bar)
+        draw_text_safe(draw, (margin + pad_x, y + pad_y - g_top), line, fill=ink, font=font)
+        y += bar_h
+    return image
+
+
 def _cap_rows(lines: list, max_lines: int, font, wrap: int) -> list:
     """Keeps at most `max_lines` rows, ending the last kept one in an ellipsis."""
     if len(lines) <= max_lines:
@@ -1406,6 +1510,9 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_
     if slide_type == "single" and slide.get("design") == "card2":
         return draw_spotlight_single(slide, hooking_title, post_photo, article_title=article_title,
                                      theme=theme, canvas=canvas, photo_anchor=photo_anchor)
+    if slide_type == "single" and slide.get("design") == "card3":
+        return draw_photo_single(slide, hooking_title, post_photo, article_title=article_title,
+                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor)
     if slide_type == "single":
         return draw_paper_single(slide, hooking_title, post_photo, article_title=article_title,
                                  theme=theme, canvas=canvas, photo_anchor=photo_anchor)
