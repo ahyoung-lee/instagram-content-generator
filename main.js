@@ -248,7 +248,7 @@ function resetReelButton() {
 // honours the same caps, so trim anything typed or pasted beyond them: what you
 // see is what the card gets.
 const COVER_SUB_MAX_LINES = 3;
-const SINGLE_BODY_MAX_LINES = 5;
+const SINGLE_BODY_MAX_LINES = 3;
 const CARD2_BODY_MAX_LINES = 2;
 
 function subMaxLines() {
@@ -724,7 +724,7 @@ const MODE_COPY = {
     single: {
         heading: '1장 카드뉴스 프리뷰',
         hint: '카드에 마우스를 올리면 나오는 <b>📷 사진 교체</b> 버튼으로 사진칸의 사진을 바꿀 수 있어요. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)',
-        subPlaceholder: '제목 아래 본문입니다. 중요한 내용이 많으면 최대 5줄까지 쓸 수 있어요. (비워두면 제목만 들어갑니다)'
+        subPlaceholder: '제목 아래 본문입니다. 최대 3줄까지 쓸 수 있어요. (비워두면 제목만 들어갑니다)'
     }
 };
 

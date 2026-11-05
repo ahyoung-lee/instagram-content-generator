@@ -426,10 +426,9 @@ def strip_highlight_markers(text: str) -> tuple:
 # three-line box under the title field, and the renderer honours the same cap.
 COVER_SUB_MAX_LINES = 3
 
-# The one-card post carries its whole story in the body block under the
-# headline, so it gets a roomier cap: three or four lines normally, up to five
-# when the article holds more facts the reader must not miss.
-SINGLE_BODY_MAX_LINES = 5
+# The one-card post (Card 1) shows a three-line body block under the headline;
+# the renderer also caps the wrapped rows at three.
+SINGLE_BODY_MAX_LINES = 3
 
 
 def cover_sub_lines(text: Optional[str], max_lines: int = COVER_SUB_MAX_LINES) -> list:
@@ -440,7 +439,7 @@ def cover_sub_lines(text: Optional[str], max_lines: int = COVER_SUB_MAX_LINES) -
     not eat one of the slots. Each surviving line keeps its own '**...**'
     markers, which the renderer paints in the theme's key color.
 
-    The cover keeps the default cap; the one-card body passes the roomier
+    The cover keeps the default cap; the one-card body passes
     SINGLE_BODY_MAX_LINES.
     """
     if not text:
@@ -763,11 +762,23 @@ def _mix(color_a: tuple, color_b: tuple, amount: float) -> tuple:
     return tuple(int(a * amount + b * (1 - amount)) for a, b in zip(color_a[:3], color_b[:3]))
 
 
+_PAPER_CACHE = {}
+
+
 def make_paper_background(width: int, height: int, seed: int) -> Image.Image:
     """
     Off-white newsprint: faint, out-of-focus columns of "text" showing through
-    from the other side of the page, plus a little grain.
+    from the other side of the page, plus a little grain. The last page made is
+    kept, since the typing frames of a Shorts cut redraw the same page.
     """
+    key = (width, height, seed)
+    if key not in _PAPER_CACHE:
+        _PAPER_CACHE.clear()
+        _PAPER_CACHE[key] = _make_paper_background(width, height, seed)
+    return _PAPER_CACHE[key].copy()
+
+
+def _make_paper_background(width: int, height: int, seed: int) -> Image.Image:
     rng = random.Random(seed)
     base = Image.new("RGB", (width, height), PAPER_COLOR)
 
@@ -932,6 +943,28 @@ class PaperPage:
         if logo is not None:
             self.image.alpha_composite(logo, (cx - size // 2, cy - size // 2))
 
+    def single_frame(self) -> int:
+        """
+        Card 1's header: "ALWAYS GOOD" on the left and the brand logo (full
+        size) on the right, between two rules spaced wide enough for the logo.
+        There is no bottom rule. Returns how much taller this header is than
+        the regular one, so the page below can move down by that much.
+        """
+        draw, p, m = self.draw, self.p, self.margin
+        x1 = self.W - m
+        size = p["logo"]
+        header_h = max(p["header_h"], size + 24)
+        h_top, h_bot = p["header_top"], p["header_top"] + header_h
+        draw.rectangle([m, h_top, x1, h_top + 2], fill=self.ink)
+        draw.rectangle([m, h_bot, x1, h_bot + 2], fill=self.ink)
+        header_font = get_system_font(p["header_font"], bold=True)
+        label_y = h_top + (header_h - p["header_font"]) // 2
+        draw.text((m, label_y), PAPER_HEADER_RIGHT, fill=self.ink, font=header_font)
+        logo = ink_logo(size)
+        if logo is not None:
+            self.image.alpha_composite(logo, (x1 - size, h_top + 2 + (header_h - size) // 2))
+        return header_h - p["header_h"]
+
     def badge(self, text: str, x: int, y: int) -> None:
         p = self.p
         font = get_system_font(p["badge_font"], bold=True)
@@ -987,6 +1020,36 @@ class PaperPage:
         self.draw.rectangle([bx0 + off, by0 + off, bx1 + off, by1 + off], fill=self.key)
         self.image.paste(fitted.convert("RGB"), (bx0, by0))
         return bx0, by0, bx1, by1
+
+
+def _reveal_counts(lines: list, reveal: Optional[int]) -> list:
+    """
+    How many characters of each headline line are typed so far, for the typing
+    effect of the Shorts cut: `reveal` counts the non-space characters typed
+    (None = the whole headline). Spaces show up with the letter after them.
+    """
+    if reveal is None:
+        return [len(line) for line in lines]
+    counts, left = [], max(0, reveal)
+    for line in lines:
+        shown = 0
+        for i, ch in enumerate(line):
+            if ch != " ":
+                if left == 0:
+                    break
+                left -= 1
+                shown = i + 1
+        counts.append(shown)
+    return counts
+
+
+def headline_char_count(slide: dict, hooking_title: str = "", article_title: str = None) -> int:
+    """Non-space characters in a one-card headline: the typing effect's step count."""
+    headline = remove_emojis((slide.get("main_text") or "").strip())
+    if not headline:
+        headline = remove_emojis((article_title or hooking_title or "").strip())
+    clean, _ = _highlight_marked(_headline_text(headline))
+    return sum(1 for ch in clean if not ch.isspace())
 
 
 def _headline_text(title: str) -> str:
@@ -1188,15 +1251,16 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
         headline = remove_emojis((article_title or hooking_title or "").strip())
     page = PaperPage(canvas, theme, _title_seed(headline))
     p, m = page.p, page.margin
-    page.frame()
+    extra = page.single_frame()
 
     body_text = remove_emojis((slide.get("sub_text") or "").strip())
     body_logical = [line for line in body_text.split("\n") if line.strip()][:SINGLE_BODY_MAX_LINES]
 
-    y = p["body_top"]
+    y = p["body_top"] + extra
     page.badge("오늘의 한 장", m, y)
     y += p["badge_h"] + p["badge_gap"]
-    bottom = p["body_bottom"]
+    # No bottom rule on this page, so the photo runs down to where it was.
+    bottom = p["rule_y"]
     in_column = photo is not None and not page.side_photo
     # Tighter gaps when the photo sits under the copy, so it gets the room.
     title_gap, photo_gap = (30, 34) if in_column else (36, p["photo_gap"])
@@ -1204,12 +1268,18 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     wrap = p["title_wrap"] if page.side_photo else p["card_wrap"]
 
     def fits(count: int, step) -> bool:
-        body_rows = _copy_rows(body_logical, step[2], wrap)
+        body_rows = _single_body_rows(body_logical, step[2], wrap)
         return y + count * step[1] + title_gap + photo_room + len(body_rows) * step[3] <= bottom
 
     rows, step = _headline_rows(headline, p["single_steps"], wrap, fits, default_last=False)
-    body_rows = _copy_rows(body_logical, step[2], wrap)
-    y = page.lines(rows, m, y, step[1]) + title_gap
+    body_rows = _single_body_rows(body_logical, step[2], wrap)
+    # Typing effect: only the typed part of the headline is drawn, and a marker
+    # stroke appears once its words are fully typed.
+    typed_rows = []
+    shown_counts = _reveal_counts([r[0] for r in rows], slide.get("_reveal"))
+    for (text, font, color, span), shown in zip(rows, shown_counts):
+        typed_rows.append((text[:shown], font, color, span if span and shown >= span[1] else None))
+    y = page.lines(typed_rows, m, y, step[1]) + title_gap
 
     if in_column:
         # Body right under the headline; the photo takes everything below it,
@@ -1224,6 +1294,16 @@ def draw_paper_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
                        whole=photo_anchor is None, align=(0.5, 0.5))
         page.lines(body_rows, m, y, step[3])
     return page.image
+
+
+def _single_body_rows(body_logical: list, size: int, wrap: int) -> list:
+    """Card 1's body: at most three rows, with no marker stroke behind any."""
+    rows = [(text, font, color, None) for text, font, color, _ in _copy_rows(body_logical, size, wrap)]
+    if len(rows) > SINGLE_BODY_MAX_LINES:
+        rows = rows[:SINGLE_BODY_MAX_LINES]
+        text, font, color, _ = rows[-1]
+        rows[-1] = (_ellipsize(text, font, wrap), font, color, None)
+    return rows
 
 
 # --- Card 2: spotlight layout ---
@@ -1341,7 +1421,8 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
         if base == accent:
             accent = white
     placed, cursor = [], 0
-    for line in lines:
+    shown_counts = _reveal_counts(lines, slide.get("_reveal"))
+    for line_no, line in enumerate(lines):
         # Each line is split into runs of (start, end, color) by its marked characters.
         pos = title.find(line.rstrip("…"), cursor)
         if pos >= 0:
@@ -1353,7 +1434,10 @@ def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image
                 runs[-1] = (runs[-1][0], i + 1, color)
             else:
                 runs.append((i, i + 1, color))
-        placed.append(((W - _text_width(font, line)) // 2, y, line, font, runs))
+        # Typing effect: the line keeps its centered spot and fills in from the left.
+        shown = shown_counts[line_no]
+        runs = [(a, min(b, shown), c) for a, b, c in runs if a < shown]
+        placed.append(((W - _text_width(font, line)) // 2, y, line[:shown], font, runs))
         y += line_height
     y += size - line_height + s["body_gap"]
     for text, body_font, color in body_rows:
@@ -1469,7 +1553,12 @@ def draw_photo_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     bar_h = (g_bottom - g_top) + pad_y * 2
     bottom = H - int(185 * unit)
     y = bottom - bar_h * len(lines)
-    for line in lines:
+    for line, shown in zip(lines, _reveal_counts(lines, slide.get("_reveal"))):
+        # Typing effect: each bar grows with its typed text.
+        line = line[:shown]
+        if not line:
+            y += bar_h
+            continue
         line_w = _text_width(font, line)
         draw.rectangle([margin, y, margin + line_w + pad_x * 2, y + bar_h], fill=bar)
         draw_text_safe(draw, (margin + pad_x, y + pad_y - g_top), line, fill=ink, font=font)
@@ -1521,6 +1610,52 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_
 
 
 
+def load_post_photo(output_dir: str) -> tuple:
+    """
+    The post's saved photo and its crop anchor: the user's upload (shown whole,
+    anchor None), else the AI background master (anchor 0.2), else (None, 0.5).
+    """
+    source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
+    master_bg_path = os.path.join(output_dir, "background_master.png")
+    try:
+        if os.path.exists(source_path):
+            return Image.open(source_path).convert("RGB"), None
+        if os.path.exists(master_bg_path):
+            print(f"Reusing existing background master image: {master_bg_path}")
+            # The AI prompt puts the subject in the upper third.
+            return Image.open(master_bg_path).convert("RGB"), 0.2
+    except Exception as e:
+        print(f"Failed to load the post photo: {e}")
+    return None, 0.5
+
+
+def render_typing_frames(plan: dict, output_dir: str, frames_dir: str,
+                         canvas: str = "story", article_title: str = None) -> list:
+    """
+    The typing effect of a one-card post's Shorts cut: the card drawn once per
+    typed headline character, from an empty headline (frame 0) to the whole
+    one. Uses the saved photo only (no API call). Returns the frame paths, or
+    [] when the plan has no one-card slide.
+    """
+    single = next((s for s in plan.get("slides", []) if s.get("type") == "single"), None)
+    if single is None:
+        return []
+    os.makedirs(frames_dir, exist_ok=True)
+    post_photo, photo_anchor = load_post_photo(output_dir)
+    hooking_title = plan.get("hooking_title", "")
+    theme = plan.get("theme", DEFAULT_THEME)
+    total = headline_char_count(single, hooking_title, article_title)
+    paths = []
+    for typed in range(total + 1):
+        img = draw_card_layout(dict(single, _reveal=typed), plan.get("total_pages", 1), hooking_title,
+                               article_title=article_title, theme=theme, photo_dir=output_dir,
+                               canvas=canvas, post_photo=post_photo, photo_anchor=photo_anchor)
+        path = os.path.join(frames_dir, f"type_{typed:03d}.jpg")
+        img.convert("RGB").save(path, "JPEG", quality=92)
+        paths.append(path)
+    return paths
+
+
 def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool = False, article_title: str = None,
                              allow_paid_background: bool = True, canvas: str = DEFAULT_CANVAS,
                              filename_prefix: str = "slide") -> list:
@@ -1548,16 +1683,9 @@ def generate_carousel_images(plan: dict, output_dir: str, reuse_background: bool
     master_bg_path = os.path.join(output_dir, "background_master.png")
     source_path = os.path.join(output_dir, BACKGROUND_SOURCE)
     post_photo, photo_anchor = None, 0.5
-    try:
-        if reuse_background and os.path.exists(source_path):
-            # The user's own photo is shown whole, never cropped.
-            post_photo, photo_anchor = Image.open(source_path).convert("RGB"), None
-        elif reuse_background and os.path.exists(master_bg_path):
-            print(f"Reusing existing background master image: {master_bg_path}")
-            # The AI prompt puts the subject in the upper third.
-            post_photo, photo_anchor = Image.open(master_bg_path).convert("RGB"), 0.2
-    except Exception as e:
-        print(f"Failed to load the post photo: {e}")
+    if reuse_background:
+        # The user's own photo is shown whole, never cropped.
+        post_photo, photo_anchor = load_post_photo(output_dir)
 
     if post_photo is None and not allow_paid_background:
         # Editing an existing post (photo added/removed): never spend money on a

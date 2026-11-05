@@ -600,9 +600,8 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
                 from src.script_vision import (COVER_SUB_MAX_LINES, SINGLE_BODY_MAX_LINES,
                                                SPOTLIGHT_BODY_MAX_LINES, cover_sub_lines)
                 # A one-card post has no cover: the same box holds that
-                # card's body block, which runs to five lines when the
-                # article carries that much the reader must not miss
-                # (two small lines on Card 2).
+                # card's body block (three lines on Card 1, two small lines
+                # on Card 2, none on Card 3).
                 if cover.get("type") != "single":
                     max_lines = COVER_SUB_MAX_LINES
                 elif cover.get("design") == "card2":
@@ -845,6 +844,34 @@ def _video_cards(post_dir: str, ordered_paths: list, orientation: str) -> list:
     return swapped
 
 
+def _typing_shorts(post_dir: str) -> Optional[str]:
+    """
+    The Shorts cut of a one-card post with its headline typing itself out on a
+    loop. Returns the video path, or None (no one-card slide, or a failure) so
+    the caller falls back to the still card.
+    """
+    import shutil
+    import tempfile
+    plan_data = _load_plan_data(post_dir)
+    plan = plan_data.get("plan") or {}
+    if not any(s.get("type") == "single" for s in plan.get("slides", [])):
+        return None
+    frames_dir = tempfile.mkdtemp(prefix="typing_frames_")
+    try:
+        from src.script_vision import render_typing_frames
+        from src.script_reels import create_typing_video
+        frames = render_typing_frames(plan, post_dir, frames_dir, canvas="story",
+                                      article_title=plan_data.get("title"))
+        if len(frames) < 2:
+            return None
+        return create_typing_video(frames, post_dir, orientation="shorts")
+    except Exception as e:
+        print(f"[reel] typing shorts failed ({e}); using the still card.", flush=True)
+        return None
+    finally:
+        shutil.rmtree(frames_dir, ignore_errors=True)
+
+
 @app.post("/api/create_reel")
 def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = Header(default=None)):
     """
@@ -874,9 +901,11 @@ def api_create_reel(payload: CreateReelRequest, x_access_key: Optional[str] = He
         if payload.orientation not in PRESETS:
             raise HTTPException(status_code=400, detail=f"알 수 없는 영상 비율입니다: {payload.orientation}")
 
-        slide_files = _video_cards(post_dir, slide_files, payload.orientation)
-
-        reel_path = create_reel_video(slide_files, post_dir, orientation=payload.orientation)
+        # A one-card post's Shorts cut types its headline out on a loop.
+        reel_path = _typing_shorts(post_dir) if payload.orientation == "shorts" else None
+        if not reel_path:
+            slide_files = _video_cards(post_dir, slide_files, payload.orientation)
+            reel_path = create_reel_video(slide_files, post_dir, orientation=payload.orientation)
 
         relative_reel_url = f"/save/{payload.date_str}/{os.path.basename(reel_path)}"
         print(f"[reel] success -> {relative_reel_url}", flush=True)

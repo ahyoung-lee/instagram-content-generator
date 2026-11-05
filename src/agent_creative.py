@@ -240,7 +240,7 @@ def _single_card_plan(headline: str, card_text: str, caption: str, image_prompt:
 
 def generate_single_card_plan(article_title: str, article_content: str) -> dict:
     """
-    Builds a one-card post from an article: a hooking headline plus a 3~5 line
+    Builds a one-card post from an article: a hooking headline plus a 3 line
     body block that has to carry the whole story on a single image, along with
     the feed caption and the background image prompt.
     """
@@ -290,9 +290,8 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
    - 예시: "정부, 청년 월세 지원 확대 시행" -> "청년 월세 지원 확대, 몰라서 못 받습니다"
    - 예시: "한국은행, 기준금리 0.25%p 인하 결정" -> "기준금리 0.25%p 인하, 내 대출이자는요?"
 
-2. `card_text`는 대제목 아래에 들어가는 본문 블록이야. 기사를 꼼꼼히 정독해서 독자가 꼭 알아야 할 핵심만 **3~5줄**로 압축해줘.
-   - 기본은 3~4줄이야. 다만 독자가 놓치면 안 되는 중요한 사실(수치·금액·조건·대상·일정 등)이 더 있으면 억지로 줄이지 말고 5줄까지 늘려 써도 돼. 5줄이 최대치이고, 그걸 넘기면 카드에 들어가지 않아.
-   - 반대로 줄 수를 채우려고 덜 중요한 내용이나 뻔한 문장을 끼워 넣지는 마. 4줄째, 5줄째는 정말 담을 핵심이 남아 있을 때만 쓰는 여유분이야.
+2. `card_text`는 대제목 아래에 들어가는 본문 블록이야. 기사를 꼼꼼히 정독해서 독자가 꼭 알아야 할 핵심만 **정확히 3줄**로 압축해줘.
+   - 3줄이 최대치이고, 4줄째부터는 카드에 들어가지 않아. 가장 중요한 사실(수치·금액·조건·대상·일정 등) 3개만 골라.
    - 카드가 한 장뿐이라 뒤에 이어지는 슬라이드가 없어. 그러니 '무엇이 어떻게 됐는지'와 '그래서 독자에게 뭐가 달라지는지'가 이 몇 줄 안에 다 들어가야 해.
    - 각 줄은 18자 내외의 완결된 구/절로 쓰고 `\\n`으로 구분해줘. 조사(을/를/이/가/은/는/와/과/의/로)나 접속사로 줄을 끝내지 마.
    - (매우 중요) 문장은 신문 헤드라인처럼 **명사형으로 짧게 끝내는 개조식**으로 써줘. "~했습니다", "~합니다", "~해요", "~됩니다", "~했다" 같은 서술형 어미는 절대 쓰지 마. 마침표도 붙이지 마.

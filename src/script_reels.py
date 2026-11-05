@@ -28,6 +28,13 @@ PRESETS = {
 }
 FPS = 30
 
+# Typing effect of a one-card Shorts cut: each headline character appears after
+# TYPE_CHAR_SECONDS, the empty headline shows for TYPE_START_SECONDS first, and
+# the finished headline holds at least TYPE_HOLD_SECONDS before typing again.
+TYPE_CHAR_SECONDS = 0.11
+TYPE_START_SECONDS = 0.4
+TYPE_HOLD_SECONDS = 1.6
+
 
 def _resize_cover(image: Image.Image, target_w: int, target_h: int) -> Image.Image:
     """Resizes and center-crops an image to completely cover the target size."""
@@ -127,7 +134,6 @@ def create_reel_video(image_paths: list, output_dir: str,
         raise ValueError("영상으로 만들 카드 이미지를 찾을 수 없습니다.")
 
     out_path = os.path.join(output_dir, preset["filename"])
-    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
     per = max(0.2, float(seconds_per_card))
     first = max(0.2, float(first_card_seconds))
@@ -175,39 +181,91 @@ def create_reel_video(image_paths: list, output_dir: str,
                 current = nxt
         current.close()
 
-        # Build the concat demuxer playlist (durations control timing).
-        list_path = os.path.join(tmp_dir, "list.txt")
-        with open(list_path, "w") as lf:
-            lf.write("ffconcat version 1.0\n")
-            for fp, d in entries:
-                lf.write(f"file '{fp}'\n")
-                lf.write(f"duration {d:.4f}\n")
-            # The concat demuxer ignores the final entry's duration unless the
-            # last image is listed once more.
-            lf.write(f"file '{entries[-1][0]}'\n")
-
-        print(f"[reel] {len(entries)} frames ready. Encoding with ffmpeg...", flush=True)
-        cmd = [
-            ffmpeg, "-y",
-            "-f", "concat", "-safe", "0", "-i", list_path,
-            "-r", str(FPS),
-            "-c:v", "libx264",
-            "-preset", "ultrafast",  # lowest encoder memory footprint
-            "-threads", "1",          # avoid per-thread buffer duplication
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            out_path,
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0 or not os.path.exists(out_path):
-            tail = (proc.stderr or "")[-1500:]
-            raise RuntimeError(f"ffmpeg 인코딩 실패 (code {proc.returncode}): {tail}")
+        _encode(entries, tmp_dir, out_path)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     print(f"[reel] created: {out_path}", flush=True)
     return out_path
+
+
+def create_typing_video(frame_paths: list, output_dir: str, orientation: str = "shorts") -> str:
+    """
+    A one-card Shorts cut whose headline types itself out one character at a
+    time, over and over: `frame_paths` are the card with 0, 1, 2, ... headline
+    characters typed (see render_typing_frames). Each round types the headline,
+    holds it, then starts again from empty; the rounds fill the preset's length.
+    """
+    preset = PRESETS.get(orientation)
+    if preset is None:
+        raise ValueError(f"알 수 없는 영상 비율입니다: {orientation}")
+    if len(frame_paths) < 2:
+        raise ValueError("타이핑 효과를 만들 프레임이 부족합니다.")
+    frame_w, frame_h = preset["size"]
+    total = float(preset["seconds"])
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, preset["filename"])
+
+    typed = len(frame_paths) - 1
+    typing = TYPE_START_SECONDS + (typed - 1) * TYPE_CHAR_SECONDS
+    rounds = max(1, int(total // (typing + TYPE_HOLD_SECONDS)))
+    hold = max(TYPE_HOLD_SECONDS, total / rounds - typing)
+
+    print(f"[reel] typing shorts: {typed} characters x {rounds} rounds", flush=True)
+    tmp_dir = tempfile.mkdtemp(prefix="reel_typing_")
+    try:
+        # Each distinct frame is composed once; the playlist repeats it per round.
+        frames = []
+        for i, path in enumerate(frame_paths):
+            fp = os.path.join(tmp_dir, f"t{i:04d}.jpg")
+            img = _compose_frame(path, frame_w, frame_h)
+            img.save(fp, "JPEG", quality=90)
+            img.close()
+            frames.append(fp)
+        entries = []
+        for _ in range(rounds):
+            entries.append((frames[0], TYPE_START_SECONDS))
+            entries += [(fp, TYPE_CHAR_SECONDS) for fp in frames[1:-1]]
+            entries.append((frames[-1], hold))
+        _encode(entries, tmp_dir, out_path)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    print(f"[reel] created: {out_path}", flush=True)
+    return out_path
+
+
+def _encode(entries: list, tmp_dir: str, out_path: str) -> None:
+    """Encodes (image path, seconds) entries into an H.264/yuv420p MP4 at `out_path`."""
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    # Build the concat demuxer playlist (durations control timing).
+    list_path = os.path.join(tmp_dir, "list.txt")
+    with open(list_path, "w") as lf:
+        lf.write("ffconcat version 1.0\n")
+        for fp, d in entries:
+            lf.write(f"file '{fp}'\n")
+            lf.write(f"duration {d:.4f}\n")
+        # The concat demuxer ignores the final entry's duration unless the
+        # last image is listed once more.
+        lf.write(f"file '{entries[-1][0]}'\n")
+
+    print(f"[reel] {len(entries)} frames ready. Encoding with ffmpeg...", flush=True)
+    cmd = [
+        ffmpeg, "-y",
+        "-f", "concat", "-safe", "0", "-i", list_path,
+        "-r", str(FPS),
+        "-c:v", "libx264",
+        "-preset", "ultrafast",  # lowest encoder memory footprint
+        "-threads", "1",          # avoid per-thread buffer duplication
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        out_path,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0 or not os.path.exists(out_path):
+        tail = (proc.stderr or "")[-1500:]
+        raise RuntimeError(f"ffmpeg 인코딩 실패 (code {proc.returncode}): {tail}")
 
 
 if __name__ == "__main__":
