@@ -116,7 +116,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
                 "main_text": "2. 카피 작성\n도파민을 자극하는 문구와\n**수익화 CTA까지 한 번에 완성**"
             }
         ],
-        "final_caption": "기사 링크 하나만 넣으면 카드뉴스가 통째로 완성됩니다.\n실시간 트렌드를 읽어 핵심 요점만 자동으로 정리해요.\n본문 캡션과 해시태그까지 한 번에 나옵니다.\n\n#인스타그램자동화 #AI마케팅 #콘텐츠제작",
+        "final_caption": "기사 링크 하나만 넣으면 카드뉴스가 통째로 완성됩니다.\n실시간 트렌드를 읽어 핵심 요점만 자동으로 정리합니다.\n본문 캡션과 해시태그까지 한 번에 나옵니다.\n\n#인스타그램자동화 #AI마케팅 #콘텐츠제작",
         "image_prompt": "A photorealistic photograph of a modern laptop and smartphone on a dark walnut desk, soft window light from the side, shallow depth of field, realistic metal and glass texture, empty dark surface across the bottom third."
     }
 
@@ -156,6 +156,7 @@ def generate_instagram_plan(article_title: str, article_content: str) -> dict:
 7. `final_caption`은 도입부나 마무리 없이, 독자가 꼭 알아야 할 핵심 내용만 **3~5줄**로 적어줘 (매우 중요):
    - 기사에서 가장 중요하고 꼭 알려야 할 사실만 골라 한 줄에 하나씩, 3~5줄로 써줘. 기본은 3~4줄이고, 놓치면 안 되는 사실이 더 남았을 때만 5줄까지 늘려. 줄 수를 채우려고 뻔한 문장을 끼워 넣지는 마.
    - 각 줄은 20~40자 정도의 완결된 문장으로 쓰고, 구체적인 수치(날짜·금액·비율·대상·조건)를 최대한 담아줘. 줄 사이는 `\\n` 하나로만 구분해.
+   - (매우 중요) 캡션의 모든 문장은 **'~입니다', '~합니다' 체(합쇼체)**로 끝내줘. '~해요', '~했어요', '~한다', '~했다' 같은 어미나 명사형으로 끊는 개조식 종결은 절대 쓰지 마. 예: "월세 지원 대상이 2배로 늘어나요" -> "월세 지원 대상이 2배로 늘어납니다"
    - '·', '-' 같은 목록 기호나 번호는 붙이지 마. 제목(`hooking_title`)을 그대로 반복하지 말고, 기사에 없는 내용은 절대 지어내지 마.
    - 인사말, 도입 문장, 마무리 CTA, 공식사이트 안내 같은 부가 블록은 전부 빼. 오직 핵심 내용 3~5줄만 있으면 돼.
    - 그 아래 `\\n\\n`으로 한 줄 띄우고, 기사 핵심 키워드를 반영한 해시태그를 **정확히 3개만** 공백으로 구분해서 한 줄에 적어줘. 3개를 초과하거나 미달하면 절대 안 돼.
@@ -207,7 +208,7 @@ JSON 스키마:
         fallback_copy["slides"][0]["main_text"] = fallback_headline
         fallback_copy["slides"][1]["main_text"] = f"기사 본문 내용 요약:\n{article_content[:50]}..."
         fallback_copy["slides"][2]["main_text"] = "트렌드 변화 속에서\n우리가 준비해야 할\n비즈니스 기회는 무엇일까요?"
-        fallback_copy["final_caption"] = f"{article_title}\n지금 가장 주목받는 핵심 이슈만 정리했어요.\n놓치면 안 되는 배경과 포인트를 함께 짚었습니다.\n\n#트렌드이슈 #뉴스요약 #실시간트렌드"
+        fallback_copy["final_caption"] = f"{article_title}\n지금 가장 주목받는 핵심 이슈만 정리했습니다.\n놓치면 안 되는 배경과 포인트를 함께 짚었습니다.\n\n#트렌드이슈 #뉴스요약 #실시간트렌드"
         fallback_copy["image_prompt"] = f"A photorealistic editorial photograph representing {article_title[:20]}, real objects and natural materials, soft directional daylight, shallow depth of field, dark uncluttered bottom third."
         fallback_copy["theme"] = random.choice(AVAILABLE_THEMES)
         return fallback_copy
@@ -255,7 +256,7 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
         ),
         caption=(
             "기사 링크 하나만 넣으면 카드 한 장이 통째로 완성됩니다.\n"
-            "실시간 트렌드를 읽어 핵심 요점만 자동으로 정리해요.\n"
+            "실시간 트렌드를 읽어 핵심 요점만 자동으로 정리합니다.\n"
             "본문 캡션과 해시태그까지 한 번에 나옵니다.\n\n"
             "#인스타그램자동화 #AI마케팅 #콘텐츠제작"
         ),
@@ -303,6 +304,7 @@ def generate_single_card_plan(article_title: str, article_content: str) -> dict:
 4. `final_caption`은 도입부나 마무리 없이, 독자가 꼭 알아야 할 핵심 내용만 **3~5줄**로 적어줘 (매우 중요):
    - 기사에서 가장 중요하고 꼭 알려야 할 사실만 골라 한 줄에 하나씩, 3~5줄로 써줘. 기본은 3~4줄이고, 놓치면 안 되는 사실이 더 남았을 때만 5줄까지 늘려.
    - 각 줄은 20~40자 정도의 완결된 문장으로 쓰고, 구체적인 수치(날짜·금액·비율·대상·조건)를 최대한 담아줘. 줄 사이는 `\\n` 하나로만 구분해.
+   - (매우 중요) 캡션의 모든 문장은 **'~입니다', '~합니다' 체(합쇼체)**로 끝내줘. '~해요', '~했어요', '~한다', '~했다' 같은 어미나 명사형으로 끊는 개조식 종결은 절대 쓰지 마. 예: "월세 지원 대상이 2배로 늘어나요" -> "월세 지원 대상이 2배로 늘어납니다"
    - '·', '-' 같은 목록 기호나 번호는 붙이지 마. 카드(`hooking_title`, `card_text`)에 쓴 문장을 그대로 반복하지 말고, 카드에 다 담지 못한 사실을 여기서 보충해줘. 기사에 없는 내용은 절대 지어내지 마.
    - 인사말, 도입 문장, 마무리 CTA, 공식사이트 안내 같은 부가 블록은 전부 빼. 오직 핵심 내용 3~5줄만 있으면 돼.
    - 그 아래 `\\n\\n`으로 한 줄 띄우고, 기사 핵심 키워드를 반영한 해시태그를 **정확히 3개만** 공백으로 구분해서 한 줄에 적어줘. 3개를 초과하거나 미달하면 절대 안 돼.
@@ -345,7 +347,7 @@ JSON 스키마:
             card_text=f"{article_content[:40]}\n**지금 가장 주목받는 핵심 이슈**\n놓치면 안 되는 배경과 포인트",
             caption=(
                 f"{article_title}\n"
-                "지금 가장 주목받는 핵심 이슈만 정리했어요.\n"
+                "지금 가장 주목받는 핵심 이슈만 정리했습니다.\n"
                 "놓치면 안 되는 배경과 포인트를 함께 짚었습니다.\n\n"
                 "#트렌드이슈 #뉴스요약 #실시간트렌드"
             ),
