@@ -294,12 +294,16 @@ def is_emoji(char: str) -> bool:
     )
 
 # Glyphs that fall in emoji ranges but are intentional design elements to keep.
-_EMOJI_KEEP = {"▶", "◀", "♡", "♥", "❤"}  # ▶ ◀ ♡ ♥ ❤
+# Every one of these is covered by the NanumSquare Round brand fonts, so they
+# draw in the card's own typeface instead of falling back to an emoji font.
+# U+2764 (❤) is deliberately absent: the brand fonts have no glyph for it, so it
+# would render as a tofu box. The outline/solid hearts ♡ ♥ cover the CTA.
+_EMOJI_KEEP = {"▶", "◀", "♡", "♥"}  # ▶ ◀ ♡ ♥
 
 def remove_emojis(text: str) -> str:
     """
-    Strips pictographic emoji from text (they render as monochrome/tofu with the
-    bundled emoji font). Intentional design glyphs like the teaser arrow ▶ and
+    Strips pictographic emoji from text (they have no glyph in the brand fonts
+    and render as tofu). Intentional design glyphs like the teaser arrow ▶ and
     the CTA heart ♡ are preserved, and leftover double spaces are collapsed.
     """
     if not text:

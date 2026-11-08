@@ -15,7 +15,10 @@ let currentPostData = {
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
 const BG_ROTATION_INTERVAL = 10800000; // 3 hours
-const bgImages = ['img/bgimg1.jpg', 'img/bgimg2.jpg', 'img/bgimg3.jpg', 'img/tai00020004619.jpg'];
+// Candidates for the rotating page background. Each one is probed on load and
+// only the files that really exist are rotated through, so dropping another
+// image into img/ and adding it here is all it takes to join the rotation.
+const bgImages = ['img/bgimg1.jpg'];
 let activeBgImages = [];
 let currentBgIndex = 0;
 
