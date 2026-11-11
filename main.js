@@ -11,7 +11,8 @@ let currentPostData = {
     design: 'card1',   // one-card look: 'card1' newspaper, 'card2' circle photo on black,
                        // 'card3' full photo with the headline on color bars
     title_color: 'white', // Card 2 headline / Card 3 bar: 'white' or an accent color name
-    photo_deck: false     // carousel drawn in the Card 3 look (photo on every card)
+    photo_deck: false,    // carousel drawn in the Card 3 look (photo on every card)
+    slides: []            // plan slides, for the per-card copy editor
 };
 
 // A carousel made in the Card 3 look: every card is a full photo with its copy
@@ -743,6 +744,89 @@ function renderSlidesPreview(imageUrls, photoSlides) {
     });
 }
 
+// --- Per-card copy editor (carousel cards 2..N) ---
+// One box per card under the preview. Only the boxes that changed are sent, and
+// the cards are redrawn from the saved photo, so editing costs no API call.
+const slideTextEditor = document.getElementById('slide-text-editor');
+const slideTextList = document.getElementById('slide-text-list');
+const updateSlidesBtn = document.getElementById('update-slides-btn');
+
+function renderSlideTextEditor() {
+    if (!slideTextEditor || !slideTextList) return;
+    const editable = currentPostData.mode === 'single' ? []
+        : (currentPostData.slides || []).filter((s) => s.type !== 'cover' && s.type !== 'single');
+    slideTextEditor.classList.toggle('hidden', editable.length === 0);
+    slideTextList.innerHTML = '';
+    editable.forEach((slide) => {
+        const row = document.createElement('div');
+        row.className = 'slide-text-row';
+        const label = document.createElement('label');
+        label.className = 'slide-text-label';
+        label.textContent = `${slide.page}번 카드`;
+        const box = document.createElement('textarea');
+        box.className = 'cover-sub-input';
+        box.value = slide.main_text || '';
+        box.dataset.page = slide.page;
+        box.dataset.original = box.value;
+        box.rows = Math.max(3, box.value.split(/\n/).length);
+        box.setAttribute('aria-label', `${slide.page}번 카드 내용 수정`);
+        label.htmlFor = box.id = `slide-text-${slide.page}`;
+        row.appendChild(label);
+        row.appendChild(box);
+        slideTextList.appendChild(row);
+    });
+}
+
+if (updateSlidesBtn) {
+    updateSlidesBtn.addEventListener('click', async () => {
+        if (!currentPostData.date_str) {
+            alert('먼저 콘텐츠를 생성해 주세요.');
+            return;
+        }
+        const boxes = [...slideTextList.querySelectorAll('textarea')];
+        const changed = boxes.filter((b) => b.value.trim() !== b.dataset.original.trim());
+        if (!changed.length) {
+            alert('바뀐 내용이 없습니다.');
+            return;
+        }
+        const empty = changed.find((b) => !b.value.trim());
+        if (empty) {
+            alert(`${empty.dataset.page}번 카드 내용이 비어 있습니다.`);
+            empty.focus();
+            return;
+        }
+
+        loadingOverlay.classList.remove('hidden');
+        try {
+            const response = await apiFetch('/api/update_slide_texts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    date_str: currentPostData.date_str,
+                    slides: changed.map((b) => ({ page: Number(b.dataset.page), text: b.value }))
+                })
+            });
+            if (!response.ok) {
+                let msg = `서버 에러 (상태 코드: ${response.status})`;
+                try { const j = await response.json(); if (j.detail) msg = j.detail; } catch (_) {}
+                throw new Error(msg);
+            }
+            const data = await response.json();
+            if (data.success) {
+                if (Array.isArray(data.slides)) currentPostData.slides = data.slides;
+                renderSlidesPreview(data.image_urls, data.photo_slides);
+                renderSlideTextEditor();
+                resetReelButton();
+            }
+        } catch (error) {
+            console.error(error);
+            alert(`카드 내용 수정 중 오류가 발생했습니다: ${error.message}`);
+        } finally {
+            loadingOverlay.classList.add('hidden');
+        }
+    });
+}
+
 // 1. Generate Content
 // The two buttons run the same pipeline; `mode` picks the format:
 // 'carousel' = the multi-card deck, 'single' = a one-card post.
@@ -843,6 +927,8 @@ async function runGenerate(mode, design = 'card1') {
             const firstSlide = (data.plan && data.plan.slides && data.plan.slides[0]) || {};
             currentPostData.title_color = firstSlide.title_color || 'white';
             currentPostData.photo_deck = currentPostData.mode !== 'single' && firstSlide.design === 'card3';
+            currentPostData.slides = (data.plan && data.plan.slides) || [];
+            renderSlideTextEditor();
             applyModeUI(currentPostData.mode, currentPostData.design);
             renderThemePicker();
             renderTitleColorPicker();

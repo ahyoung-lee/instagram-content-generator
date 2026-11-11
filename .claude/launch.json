@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "uvicorn", "src.app:app", "--host", "127.0.0.1", "--port", "8000"],
       "port": 8000
+    },
+    {
+      "name": "dashboard-windows",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "src.app:app", "--host", "127.0.0.1", "--port", "8000"],
+      "port": 8000
     }
   ]
 }

@@ -1123,3 +1123,19 @@ body {
         padding: 14px 18px;
     }
 }
+
+/* Per-card copy editor (carousel cards 2..N) */
+.slide-text-row {
+    margin-bottom: 14px;
+}
+
+.slide-text-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #e5e7eb;
+}
+
+.slide-text-row .cover-sub-input {
+    margin-top: 6px;
+}

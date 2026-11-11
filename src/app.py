@@ -68,6 +68,14 @@ class UpdateTitleColorRequest(BaseModel):
     date_str: str
     title_color: str   # "white" or one of the THEMES names
 
+class SlideTextEdit(BaseModel):
+    page: int
+    text: str
+
+class UpdateSlideTextsRequest(BaseModel):
+    date_str: str
+    slides: List[SlideTextEdit]   # cards 2..N whose copy changed
+
 class PrepareDownloadRequest(BaseModel):
     date_str: str
     caption: str
@@ -663,6 +671,40 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
     except Exception as e:
         import traceback
         print(f"Update title error: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/update_slide_texts")
+def api_update_slide_texts(payload: UpdateSlideTextsRequest, x_access_key: Optional[str] = Header(default=None)):
+    """
+    Rewrites the copy of carousel cards 2..N and redraws them. The cover is
+    edited through /api/update_title. Copy and photo are reused, so no paid API
+    call is made.
+    """
+    verify_access(x_access_key)
+    try:
+        post_dir = os.path.join(SAVE_DIR, payload.date_str)
+        if not os.path.exists(_plan_path(post_dir)):
+            raise HTTPException(status_code=404, detail="콘텐츠를 먼저 생성해 주세요.")
+
+        data = _load_plan_data(post_dir)
+        for edit in payload.slides:
+            slide = _find_slide(data, edit.page)
+            if slide is None or slide.get("type") in ("cover", "single"):
+                raise HTTPException(status_code=400, detail=f"{edit.page}번 카드는 여기서 수정할 수 없습니다.")
+            text = "\n".join(line.rstrip() for line in (edit.text or "").strip().splitlines())
+            if not text:
+                raise HTTPException(status_code=400, detail=f"{edit.page}번 카드 내용이 비어 있습니다.")
+            slide["main_text"] = text
+        _save_plan_data(post_dir, data)
+
+        result = _rerender_response(payload.date_str, post_dir, data)
+        result["slides"] = data["plan"].get("slides", [])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Update slide texts error: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/themes")

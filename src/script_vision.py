@@ -1528,9 +1528,9 @@ def draw_photo_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     margin = int(80 * unit)
 
     if photo is not None:
-        # Fill the card edge to edge; an uncropped upload is kept a little
-        # toward the top, where faces and subjects usually are.
-        fitted = resize_to_cover(photo, W, H, 0.35 if photo_anchor is None else photo_anchor)
+        # Fill the card edge to edge (top, bottom, left, right). The crop is
+        # centered, so a tall photo loses as much at the top as at the bottom.
+        fitted = resize_to_cover(photo, W, H, 0.5)
         image = fitted.convert("RGBA")
     else:
         image = Image.new("RGBA", (W, H), _mix(get_theme(theme)["key"][:3], (235, 235, 235), 0.55) + (255,))

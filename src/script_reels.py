@@ -63,8 +63,8 @@ def _compose_frame(card_path: str, frame_w: int, frame_h: int) -> Image.Image:
     Composes one video frame from a 4:5 card image:
       - a blurred, darkened copy of the card fills the whole canvas
       - the sharp card is scaled to *fit inside* the frame and centered, so no
-        part of the card is ever cropped. A 9:16 frame leaves blurred bands
-        above and below the card; a 16:9 frame leaves them left and right.
+        part of the card is ever cropped. A 9:16 frame leaves white bands
+        above and below the card; a 16:9 frame leaves blurred ones left and right.
     """
     try:
         resample = Image.Resampling.LANCZOS
@@ -72,6 +72,15 @@ def _compose_frame(card_path: str, frame_w: int, frame_h: int) -> Image.Image:
         resample = Image.ANTIALIAS
 
     card = Image.open(card_path).convert("RGB")
+
+    if frame_h > frame_w:
+        # 9:16 Reels: the card sits centered with plain white bands above and
+        # below it, like the Shorts cut.
+        bg = Image.new("RGB", (frame_w, frame_h), (255, 255, 255))
+        scale = min(frame_w / card.width, frame_h / card.height)
+        new_w, new_h = max(1, int(card.width * scale)), max(1, int(card.height * scale))
+        bg.paste(card.resize((new_w, new_h), resample), ((frame_w - new_w) // 2, (frame_h - new_h) // 2))
+        return bg
 
     # Blurred background fills the letterbox/pillarbox area behind the card.
     # Blur on a downscaled copy (cheap) then upscale — visually identical to a

@@ -11,7 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;400;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261111">
+    <link rel="stylesheet" href="style.css?v=20261112">
 </head>
 
 <body>
@@ -96,6 +96,16 @@
                     </div>
                 </div>
 
+                <!-- Carousel cards 2..N: one box per card -->
+                <div id="slide-text-editor" class="title-edit-container hidden">
+                    <h4>카드별 내용 수정 (2번 카드부터)</h4>
+                    <p class="insert-hint">각 카드에 들어간 글을 고칠 수 있어요. <b>줄바꿈</b>한 곳에서 카드의 줄도 바뀝니다. 고친 카드만 <b>내용 변경하기</b>로 한 번에 다시 그려져요. (추가 비용 없음)</p>
+                    <div id="slide-text-list" class="slide-text-list"></div>
+                    <div class="title-edit-actions">
+                        <button id="update-slides-btn" class="btn-secondary" type="button">내용 변경하기</button>
+                    </div>
+                </div>
+
                 <div class="caption-container">
                     <h4>본문 캡션 및 해시태그</h4>
                     <textarea id="caption-text" placeholder="생성된 캡션 내용이 여기에 표시되며, 자유롭게 수정할 수 있습니다."></textarea>
@@ -164,7 +174,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=20261111"></script>
+    <script src="main.js?v=20261112"></script>
 </body>
 
 </html>
