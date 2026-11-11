@@ -286,6 +286,14 @@ async def api_generate(
                     slide["title_color"] = "yellow"
         else:
             plan = generate_instagram_plan(title, content)
+            # The carousel is drawn in the Card 3 look: the photo fills every
+            # card, the cover headline (no sub-copy) and the content cards'
+            # smaller copy sit on yellow bars. Each card can take its own photo.
+            for slide in plan.get("slides", []):
+                slide["design"] = "card3"
+                slide["title_color"] = "yellow"
+                if slide.get("type") == "cover":
+                    slide.pop("sub_text", None)
 
         # The post title is the AI's click-worthy rewrite of the headline, not the
         # raw scraped one. The original is kept as source_title for reference.
@@ -394,7 +402,8 @@ async def api_insert_image(
             raise HTTPException(status_code=400, detail="사진을 넣을 카드를 찾을 수 없습니다.")
         if slide.get("type") == "single":
             raise HTTPException(status_code=400, detail="1장 카드는 '사진 교체'로 배경 사진을 바꿔 주세요.")
-        if slide.get("type") == "cover":
+        # A Card 3 style carousel takes a photo on every card, the cover included.
+        if slide.get("type") == "cover" and slide.get("design") != "card3":
             raise HTTPException(status_code=400, detail="표지에는 사진을 넣을 수 없습니다.")
 
         # One photo per card: a re-upload overwrites the previous file.
@@ -602,12 +611,12 @@ def api_update_title(payload: UpdateTitleRequest, x_access_key: Optional[str] = 
                 # A one-card post has no cover: the same box holds that
                 # card's body block (three lines on Card 1, two small lines
                 # on Card 2, none on Card 3).
-                if cover.get("type") != "single":
+                if cover.get("design") == "card3":
+                    max_lines = 0  # Card 3 (one-card or carousel cover) is the headline only
+                elif cover.get("type") != "single":
                     max_lines = COVER_SUB_MAX_LINES
                 elif cover.get("design") == "card2":
                     max_lines = SPOTLIGHT_BODY_MAX_LINES
-                elif cover.get("design") == "card3":
-                    max_lines = 0  # Card 3 is the headline only
                 else:
                     max_lines = SINGLE_BODY_MAX_LINES
                 sub_text = "\n".join(cover_sub_lines(payload.subtitle, max_lines))

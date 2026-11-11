@@ -10,8 +10,15 @@ let currentPostData = {
     mode: 'carousel',  // 'carousel' = multi-card deck, 'single' = one-card post
     design: 'card1',   // one-card look: 'card1' newspaper, 'card2' circle photo on black,
                        // 'card3' full photo with the headline on color bars
-    title_color: 'white'  // Card 2 headline / Card 3 bar: 'white' or an accent color name
+    title_color: 'white', // Card 2 headline / Card 3 bar: 'white' or an accent color name
+    photo_deck: false     // carousel drawn in the Card 3 look (photo on every card)
 };
+
+// A carousel made in the Card 3 look: every card is a full photo with its copy
+// on color bars, and each card's photo can be swapped on its own.
+function isPhotoDeck() {
+    return currentPostData.mode !== 'single' && currentPostData.photo_deck;
+}
 
 // --- Background Image Rotation System (3 Hours / 10,800,000ms) ---
 const BG_ROTATION_INTERVAL = 10800000; // 3 hours
@@ -255,6 +262,7 @@ const SINGLE_BODY_MAX_LINES = 3;
 const CARD2_BODY_MAX_LINES = 2;
 
 function subMaxLines() {
+    if (isPhotoDeck()) return 0;  // the Card 3 cover is the headline only
     if (currentPostData.mode !== 'single') return COVER_SUB_MAX_LINES;
     if (currentPostData.design === 'card3') return 0;  // headline only
     return currentPostData.design === 'card2' ? CARD2_BODY_MAX_LINES : SINGLE_BODY_MAX_LINES;
@@ -386,11 +394,16 @@ const TITLE_COLOR_COPY = {
     card3: {
         heading: 'Card 3 제목 배경색',
         hint: '제목 뒤에 깔리는 <b>띠 색</b>을 고를 수 있어요. 밝은 색에는 검은 글씨, 어두운 색에는 흰 글씨가 들어갑니다. (추가 비용 없음)'
+    },
+    deck: {
+        heading: '카드 글씨 배경색',
+        hint: '모든 카드의 글씨 뒤에 깔리는 <b>띠 색</b>을 고를 수 있어요. 밝은 색에는 검은 글씨, 어두운 색에는 흰 글씨가 들어갑니다. (추가 비용 없음)'
     }
 };
 
 async function renderTitleColorPicker() {
-    const design = currentPostData.mode === 'single' ? currentPostData.design : '';
+    const design = currentPostData.mode === 'single' ? currentPostData.design
+        : (isPhotoDeck() ? 'deck' : '');
     const copy = TITLE_COLOR_COPY[design];
     if (titleColorContainer) titleColorContainer.classList.toggle('hidden', !copy);
     if (!titleColorSwatches || !copy) return;
@@ -409,7 +422,7 @@ async function renderTitleColorPicker() {
         chip.className = 'theme-swatch';
         chip.style.background = hex;
         chip.title = label;
-        chip.setAttribute('aria-label', (design === 'card3' ? '제목 배경을 ' : '제목을 ') + label + '으로 변경');
+        chip.setAttribute('aria-label', (design === 'card2' ? '제목을 ' : '글씨 배경을 ') + label + '으로 변경');
         chip.setAttribute('aria-pressed', String(active));
         chip.classList.toggle('active', active);
         chip.addEventListener('click', () => applyTitleColor(name));
@@ -556,7 +569,8 @@ async function attachPhotoTo(filename, file) {
 
 // Detaches the photo from a card; the card goes back to the full-size copy layout.
 async function removePhotoFrom(filename) {
-    if (!confirm('이 카드에서 사진을 뺄까요?')) return;
+    const question = isPhotoDeck() ? '이 카드의 사진을 원래 사진으로 되돌릴까요?' : '이 카드에서 사진을 뺄까요?';
+    if (!confirm(question)) return;
     loadingOverlay.classList.remove('hidden');
     try {
         const response = await apiFetch('/api/remove_photo', {
@@ -667,7 +681,7 @@ function renderSlidesPreview(imageUrls, photoSlides) {
             del.type = 'button';
             del.className = 'slide-del-btn';
             del.textContent = '×';
-            del.title = '이 카드에서 사진 빼기';
+            del.title = isPhotoDeck() ? '원래 사진으로 되돌리기' : '이 카드에서 사진 빼기';
             del.addEventListener('click', (e) => {
                 e.stopPropagation();
                 removePhotoFrom(filename);
@@ -688,6 +702,20 @@ function renderSlidesPreview(imageUrls, photoSlides) {
                 triggerPhotoFor(BACKGROUND_TARGET);
             });
             wrapper.appendChild(bg);
+        }
+        // Card 3 style carousel: every card (the cover too) is drawn on its own
+        // photo, so each one gets a button that swaps just that card's photo.
+        else if (isPhotoDeck() && !isExtra) {
+            const swap = document.createElement('button');
+            swap.type = 'button';
+            swap.className = 'slide-insert-btn';
+            swap.textContent = '📷 사진 교체';
+            swap.title = '이 카드의 사진만 바꾸기';
+            swap.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerPhotoFor(filename);
+            });
+            wrapper.appendChild(swap);
         }
         // "Put a photo on top of this card" button (not on the cover or legacy photo cards).
         else if (!isExtra && !isCover) {
@@ -719,6 +747,10 @@ function renderSlidesPreview(imageUrls, photoSlides) {
 // The two buttons run the same pipeline; `mode` picks the format:
 // 'carousel' = the multi-card deck, 'single' = a one-card post.
 const MODE_COPY = {
+    deck: {
+        heading: '카드뉴스 슬라이드 프리뷰',
+        hint: '카드마다 <b>📷 사진 교체</b> 버튼으로 <b>그 카드의 사진만</b> 바꿀 수 있어요. <b>×</b>를 누르면 원래 사진으로 돌아갑니다. (사진만 바꾸는 거라 추가 비용은 들지 않습니다.)'
+    },
     carousel: {
         heading: '카드뉴스 슬라이드 프리뷰',
         hint: '각 카드의 <b>＋ 사진</b> 버튼을 누르면 그 카드 <b>상단에 사진</b>이 들어가고, 글은 작아지면서 아래쪽으로 내려갑니다. 표지에는 넣을 수 없어요.',
@@ -737,7 +769,8 @@ const CARD2_SUB_PLACEHOLDER = '제목 아래 작은 글씨로 들어갈 내용�
 // post has nothing to swipe through, so the reel/YouTube buttons step aside and
 // the 9-second shorts cut takes their place.
 function applyModeUI(mode, design) {
-    const copy = MODE_COPY[mode] || MODE_COPY.carousel;
+    const copy = (mode !== 'single' && currentPostData.photo_deck) ? MODE_COPY.deck
+        : (MODE_COPY[mode] || MODE_COPY.carousel);
     if (previewHeading) previewHeading.textContent = copy.heading;
     if (insertHint) insertHint.innerHTML = copy.hint;
 
@@ -752,8 +785,9 @@ function applyModeUI(mode, design) {
             : isSingle ? SINGLE_BODY_MAX_LINES : COVER_SUB_MAX_LINES;
         const placeholder = isCard2 ? CARD2_SUB_PLACEHOLDER : copy.subPlaceholder;
         if (placeholder) coverSubInput.placeholder = placeholder;
-        // Card 3 is the headline only, so there is no body box to fill.
-        coverSubInput.classList.toggle('hidden', isCard3);
+        // Card 3 (and the carousel cover drawn like it) is the headline only,
+        // so there is no body box to fill.
+        coverSubInput.classList.toggle('hidden', isCard3 || isPhotoDeck());
     }
 
     [reelBtn, reelYtBtn].forEach((btn) => {
@@ -808,6 +842,7 @@ async function runGenerate(mode, design = 'card1') {
             currentPostData.theme = (data.plan && data.plan.theme) || '';
             const firstSlide = (data.plan && data.plan.slides && data.plan.slides[0]) || {};
             currentPostData.title_color = firstSlide.title_color || 'white';
+            currentPostData.photo_deck = currentPostData.mode !== 'single' && firstSlide.design === 'card3';
             applyModeUI(currentPostData.mode, currentPostData.design);
             renderThemePicker();
             renderTitleColorPicker();

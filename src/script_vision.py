@@ -1483,22 +1483,45 @@ def _card3_bar_color(name: Optional[str]) -> tuple:
     return THEMES.get(name or CARD3_DEFAULT_BAR, THEMES[CARD3_DEFAULT_BAR])["key"][:3] + (255,)
 
 
+# The carousel ("Generate") is drawn in the Card 3 look too: the cover is Card 3
+# as is, and cards 2..N put their copy on the same bars in a smaller size.
+CARD3_TITLE_STEPS = (92, 84, 76, 68, 60)
+CARD3_BODY_STEPS = (58, 54, 50, 46, 42)
+CARD3_BODY_MAX_LINES = 7
+
+
+def _card3_body_lines(text: str, font, wrap: int) -> list:
+    """A content card's copy as bar rows: each '\\n' line wrapped, '**' markers dropped."""
+    rows = []
+    for logical in format_korean_line_breaks(text).split("\n"):
+        clean, _ = strip_highlight_markers(logical)
+        if clean.strip():
+            rows += wrap_text(clean.strip(), font, wrap)
+    return rows
+
+
 def draw_photo_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
                       article_title: str = None, theme: str = "orange",
                       canvas: str = DEFAULT_CANVAS,
-                      photo_anchor: Optional[float] = 0.5) -> Image.Image:
-    """Card 3: full-bleed photo, headline on color bars at the bottom left."""
+                      photo_anchor: Optional[float] = 0.5,
+                      compact: bool = False) -> Image.Image:
+    """
+    Card 3: full-bleed photo, headline on color bars at the bottom left.
+    `compact` draws a carousel content card instead: its whole copy on the
+    same bars, in a smaller size.
+    """
     if canvas == "story":
         # Shorts: the 4:5 card centered on a white 9:16 frame.
         card = draw_photo_single(slide, hooking_title, photo, article_title=article_title,
-                                 theme=theme, canvas=DEFAULT_CANVAS, photo_anchor=photo_anchor)
+                                 theme=theme, canvas=DEFAULT_CANVAS, photo_anchor=photo_anchor,
+                                 compact=compact)
         W, H = get_canvas("story")["size"]
         frame = Image.new("RGBA", (W, H), (255, 255, 255, 255))
         frame.paste(card, ((W - card.width) // 2, (H - card.height) // 2))
         return frame
 
     headline = remove_emojis((slide.get("main_text") or "").strip())
-    if not headline:
+    if not headline and not compact:
         headline = remove_emojis((article_title or hooking_title or "").strip())
     W, H = get_canvas(canvas)["size"]
     unit = W / 1080 if W <= H else H / 1350  # scale for the wide canvas
@@ -1527,22 +1550,34 @@ def draw_photo_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
     draw.text((tx + tag_pad_x, ty + tag_pad_y - t_top), SPOTLIGHT_LABEL,
               fill=(255, 255, 255, 255), font=tag_font)
 
-    # Headline: the biggest size that fits in two lines, else three.
-    title, _ = _highlight_marked(_headline_text(headline))
     wrap = W - margin * 2 - int(40 * unit)
-    steps = [int(v * unit) for v in (92, 84, 76, 68, 60)]
     lines, font = None, None
-    for max_lines in (2, CARD3_TITLE_MAX_LINES):
-        for size in steps:
+    if compact:
+        # Content card: the biggest small size that keeps the copy within
+        # CARD3_BODY_MAX_LINES bars, else the smallest one, cut short.
+        for size in (int(v * unit) for v in CARD3_BODY_STEPS):
             font = get_system_font(size, bold=True)
-            candidate = wrap_text(title, font, wrap)
-            if len(candidate) <= max_lines:
+            candidate = _card3_body_lines(headline, font, wrap)
+            if len(candidate) <= CARD3_BODY_MAX_LINES:
                 lines = candidate
                 break
-        if lines:
-            break
-    if not lines:
-        lines = _cap_rows(candidate, CARD3_TITLE_MAX_LINES, font, wrap)
+        if lines is None:
+            lines = _cap_rows(candidate, CARD3_BODY_MAX_LINES, font, wrap)
+    else:
+        # Headline: the biggest size that fits in two lines, else three.
+        title, _ = _highlight_marked(_headline_text(headline))
+        steps = [int(v * unit) for v in CARD3_TITLE_STEPS]
+        for max_lines in (2, CARD3_TITLE_MAX_LINES):
+            for size in steps:
+                font = get_system_font(size, bold=True)
+                candidate = wrap_text(title, font, wrap)
+                if len(candidate) <= max_lines:
+                    lines = candidate
+                    break
+            if lines:
+                break
+        if not lines:
+            lines = _cap_rows(candidate, CARD3_TITLE_MAX_LINES, font, wrap)
 
     # One bar per line, hugging its text, stacked without a gap and anchored
     # to the bottom of the card.
@@ -1553,7 +1588,7 @@ def draw_photo_single(slide: dict, hooking_title: str, photo: Optional[Image.Ima
         _, g_top, _, g_bottom = font.getbbox("가Ag%")
     else:
         g_top, g_bottom = 0, font.size
-    pad_x, pad_y = int(14 * unit), int(16 * unit)
+    pad_x, pad_y = int(14 * unit), int((12 if compact else 16) * unit)
     bar_h = (g_bottom - g_top) + pad_y * 2
     bottom = H - int(185 * unit)
     y = bottom - bar_h * len(lines)
@@ -1597,15 +1632,21 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_
     a content card is looked up in `photo_dir` and is always shown whole.
     """
     slide_type = slide.get("type", "content")
+    if slide.get("design") == "card3":
+        # Card 3 look (the one-card post, and every card of a carousel made in
+        # it). A photo the user put on this card replaces the post photo here.
+        own = resolve_user_photo(slide, photo_dir)
+        if own:
+            post_photo, photo_anchor = Image.open(own).convert("RGB"), None
+        return draw_photo_single(slide, hooking_title, post_photo, article_title=article_title,
+                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor,
+                                 compact=slide_type not in ("cover", "single"))
     if slide_type == "cover":
         return draw_paper_cover(slide, hooking_title, post_photo, article_title=article_title,
                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor)
     if slide_type == "single" and slide.get("design") == "card2":
         return draw_spotlight_single(slide, hooking_title, post_photo, article_title=article_title,
                                      theme=theme, canvas=canvas, photo_anchor=photo_anchor)
-    if slide_type == "single" and slide.get("design") == "card3":
-        return draw_photo_single(slide, hooking_title, post_photo, article_title=article_title,
-                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor)
     if slide_type == "single":
         return draw_paper_single(slide, hooking_title, post_photo, article_title=article_title,
                                  theme=theme, canvas=canvas, photo_anchor=photo_anchor)
