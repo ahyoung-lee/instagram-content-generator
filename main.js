@@ -8,9 +8,9 @@ let currentPostData = {
     subtitle: '',      // up to 3 lines drawn under the cover title
     theme: '',         // accent color: rolled at random, then user-selectable
     mode: 'carousel',  // 'carousel' = multi-card deck, 'single' = one-card post
-    design: 'card1',   // one-card look: 'card1' newspaper, 'card2' circle photo on black,
+    design: 'card1',   // one-card look: 'card1' newspaper, 'card2' full photo under a color gradient,
                        // 'card3' full photo with the headline on color bars
-    title_color: 'white', // Card 2 headline / Card 3 bar: 'white' or an accent color name
+    title_color: 'white', // Card 2 gradient / Card 3 bar: 'white' or an accent color name
     photo_deck: false,    // carousel drawn in the Card 3 look (photo on every card)
     slides: []            // plan slides, for the per-card copy editor
 };
@@ -389,8 +389,8 @@ async function applyTheme(theme) {
 // the Card 3 bars behind the headline (yellow by default).
 const TITLE_COLOR_COPY = {
     card2: {
-        heading: 'Card 2 제목 색상',
-        hint: '제목 글씨 색을 <b>흰색</b>이나 강조 색상 중에서 고를 수 있어요. 강조 색상과 같은 색을 고르면 <b>**별표**</b> 단어는 흰색으로 바뀝니다. (추가 비용 없음)'
+        heading: 'Card 2 그라데이션 색상',
+        hint: '사진 아래에서 올라오는 <b>그라데이션 색</b>을 고를 수 있어요. 밝은 색에는 검은 글씨, 어두운 색에는 흰 글씨가 들어갑니다. (추가 비용 없음)'
     },
     card3: {
         heading: 'Card 3 제목 배경색',
@@ -423,7 +423,7 @@ async function renderTitleColorPicker() {
         chip.className = 'theme-swatch';
         chip.style.background = hex;
         chip.title = label;
-        chip.setAttribute('aria-label', (design === 'card2' ? '제목을 ' : '글씨 배경을 ') + label + '으로 변경');
+        chip.setAttribute('aria-label', (design === 'card2' ? '그라데이션을 ' : '글씨 배경을 ') + label + '으로 변경');
         chip.setAttribute('aria-pressed', String(active));
         chip.classList.toggle('active', active);
         chip.addEventListener('click', () => applyTitleColor(name));
@@ -973,7 +973,7 @@ generateBtn.addEventListener('click', () => runGenerate('carousel'));
 if (generateOneBtn) {
     generateOneBtn.addEventListener('click', () => runGenerate('single'));
 }
-// Card 2: the same one-card post in its second design (circle photo on black).
+// Card 2: the same one-card post in its second design (full photo under a color gradient).
 const generateCard2Btn = document.getElementById('generate-card2-btn');
 if (generateCard2Btn) {
     generateCard2Btn.addEventListener('click', () => runGenerate('single', 'card2'));

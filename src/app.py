@@ -188,8 +188,9 @@ async def api_generate(
     `mode` picks the format: "carousel" is the multi-card deck, "single" is the
     one-card post whose headline and short body block share one image.
     `design` picks the one-card look: "card1" is the newspaper page, "card2"
-    the photo-in-a-circle on black with the headline only, "card3" the full
-    photo with the headline on color bars.
+    the full photo under a color gradient rising from the bottom with the
+    headline and two small lines on it, "card3" the full photo with the
+    headline on color bars.
 
     An optional `background` photo replaces the AI-generated cover artwork: the
     uploaded image becomes this post's background master, so no paid image call
@@ -283,10 +284,12 @@ async def api_generate(
             for slide in plan.get("slides", []):
                 slide["design"] = design
                 if design == "card2":
-                    # Card 2 shows only two small lines under the headline.
+                    # Card 2 shows only two small lines under the headline, on
+                    # a gradient that starts out yellow.
                     from src.script_vision import SPOTLIGHT_BODY_MAX_LINES, cover_sub_lines
                     slide["sub_text"] = "\n".join(
                         cover_sub_lines(slide.get("sub_text"), SPOTLIGHT_BODY_MAX_LINES))
+                    slide["title_color"] = "yellow"
                 elif design == "card3":
                     # Card 3 is the headline on color bars over the photo, with
                     # no body copy. The bars start out yellow.
@@ -763,10 +766,10 @@ def api_update_theme(payload: UpdateThemeRequest, x_access_key: Optional[str] = 
 @app.post("/api/update_title_color")
 def api_update_title_color(payload: UpdateTitleColorRequest, x_access_key: Optional[str] = Header(default=None)):
     """
-    Repaints the Card 2 headline (or the Card 3 headline bars) in white or one
-    of the accent colors.
+    Repaints the Card 2 bottom gradient (or the Card 3 headline bars) in white
+    or one of the accent colors.
 
-    The color rides on the Card 2 slide, so later redraws keep it. Like a theme
+    The color rides on the slide, so later redraws keep it. Like a theme
     change, the copy and photo are reused and no paid API call is made.
     """
     verify_access(x_access_key)

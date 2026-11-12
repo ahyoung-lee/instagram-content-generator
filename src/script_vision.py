@@ -44,14 +44,14 @@ CANVASES = {
             "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
             "single_photo_min": 440,
         },
-        # Card 2 (spotlight): label spot, photo circle (center x, center y,
-        # radius), the black fade (start y, fully black y), and the centered
-        # headline + body block (its center y, wrap width, headline (size, line
-        # height) steps, body (size, line height), gap between them).
-        "spotlight": {
-            "label": (80, 46, 24), "circle": (540, 640, 600), "fade": (420, 1180),
-            "center_y": 760, "title_wrap": 940, "body": (34, 52), "body_gap": 34,
-            "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
+        # Card 2 (gradient): the copy block starts at the canvas margin and its
+        # bottom sits `bottom` px above the card's bottom edge. Wrap width, the
+        # "always good" pill font size, the gaps pill-headline and
+        # headline-sub-copy, sub-copy (size, line height), headline steps.
+        "gradient": {
+            "bottom": 110, "wrap": 920, "label": 32, "label_gap": 40,
+            "sub": (34, 50), "sub_gap": 52,
+            "title_steps": ((112, 124), (102, 114), (94, 106), (86, 98), (78, 90)),
         },
     },
     "landscape": {
@@ -74,10 +74,10 @@ CANVASES = {
             "single_steps": ((84, 100, 40, 62), (76, 92, 37, 57), (68, 82, 34, 52), (60, 74, 31, 47)),
             "single_photo_min": 0,
         },
-        "spotlight": {
-            "label": (140, 60, 26), "circle": (960, 520, 580), "fade": (280, 1040),
-            "center_y": 600, "title_wrap": 1100, "body": (36, 54), "body_gap": 34,
-            "title_steps": ((104, 146), (94, 134), (84, 120), (74, 106)),
+        "gradient": {
+            "bottom": 90, "wrap": 1320, "label": 32, "label_gap": 36,
+            "sub": (36, 52), "sub_gap": 46,
+            "title_steps": ((112, 124), (102, 114), (94, 106), (86, 98), (78, 90)),
         },
     },
     "story": {
@@ -101,11 +101,11 @@ CANVASES = {
             "single_steps": ((76, 90, 36, 56), (68, 82, 34, 52), (60, 74, 31, 47), (54, 66, 28, 43)),
             "single_photo_min": 520,
         },
-        # The headline stays clear of the Shorts UI at the bottom (~350px).
-        "spotlight": {
-            "label": (80, 150, 26), "circle": (540, 820, 640), "fade": (640, 1560),
-            "center_y": 1060, "title_wrap": 940, "body": (36, 54), "body_gap": 36,
-            "title_steps": ((104, 150), (94, 136), (84, 122), (74, 108)),
+        # The copy stays clear of the Shorts UI at the bottom (~350px).
+        "gradient": {
+            "bottom": 380, "wrap": 920, "label": 32, "label_gap": 40,
+            "sub": (36, 52), "sub_gap": 52,
+            "title_steps": ((112, 124), (102, 114), (94, 106), (86, 98), (78, 90)),
         },
     },
 }
@@ -1310,154 +1310,136 @@ def _single_body_rows(body_logical: list, size: int, wrap: int) -> list:
     return rows
 
 
-# --- Card 2: spotlight layout ---
-# A one-card post on black: the photo inside a large circle (like a spotlight
-# or lens), a black fade over the bottom, a small "always good" label top-left
-# and the headline in white at the bottom. Only the headline is drawn.
-SPOTLIGHT_BLACK = (8, 8, 10)
+# --- Card 2: gradient layout ---
+# A one-card post: the photo fills the whole card and a color gradient rises
+# from the bottom over it. On the solid part sit, left-aligned, a small
+# "always good" pill, the headline in an extra-heavy weight and up to two
+# small sub-copy lines. The gradient color is the slide's title_color
+# (yellow by default), changed from the dashboard.
 SPOTLIGHT_LABEL = "always good"
 SPOTLIGHT_TITLE_MAX_LINES = 3
 SPOTLIGHT_BODY_MAX_LINES = 2
 SINGLE_DESIGNS = ("card1", "card2", "card3")
+CARD2_DEFAULT_GRADIENT = "yellow"
+CARD2_YELLOW = (240, 252, 28)  # the default gradient, a bright lemon-lime
+CARD2_INK = (12, 12, 12, 255)
 
 
-def _radial_mask(diameter: int, curve) -> Image.Image:
-    """L mask of a disc whose value at radius fraction t (0 center, 1 edge) is curve(t)."""
-    size = 512
-    mask = Image.new("L", (size, size), 0)
-    m_draw = ImageDraw.Draw(mask)
-    half = size // 2
-    for step in range(half, 0, -1):
-        m_draw.ellipse([half - step, half - step, half + step, half + step],
-                       fill=int(curve(step / half)))
-    try:
-        resample_filter = Image.Resampling.BICUBIC
-    except AttributeError:
-        resample_filter = Image.BICUBIC
-    return mask.resize((diameter, diameter), resample_filter)
+def _card2_gradient_color(name: Optional[str]) -> tuple:
+    """RGB of the Card 2 gradient: white, the default yellow or a theme color."""
+    name = name or CARD2_DEFAULT_GRADIENT
+    if name == "white":
+        return (255, 255, 255)
+    if name == CARD2_DEFAULT_GRADIENT:
+        return CARD2_YELLOW
+    return THEMES.get(name, THEMES[CARD2_DEFAULT_GRADIENT])["key"][:3]
 
 
-def draw_spotlight_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
-                          article_title: str = None, theme: str = "orange",
-                          canvas: str = DEFAULT_CANVAS,
-                          photo_anchor: Optional[float] = 0.5) -> Image.Image:
-    """Card 2: the photo in a circle on black, headline only at the bottom."""
+def _font_band(font, sample: str = "가Ag") -> tuple:
+    """(top, bottom) of the glyph band drawn at y = 0, for vertical placement."""
+    if hasattr(font, "getbbox"):
+        _, top, _, bottom = font.getbbox(sample)
+        return top, bottom
+    return 0, getattr(font, "size", 20)
+
+
+def draw_gradient_single(slide: dict, hooking_title: str, photo: Optional[Image.Image],
+                         article_title: str = None, theme: str = "orange",
+                         canvas: str = DEFAULT_CANVAS,
+                         photo_anchor: Optional[float] = 0.5) -> Image.Image:
+    """Card 2: full photo, a color gradient up from the bottom, copy on top of it."""
     headline = remove_emojis((slide.get("main_text") or "").strip())
     if not headline:
         headline = remove_emojis((article_title or hooking_title or "").strip())
     spec = get_canvas(canvas)
     W, H = spec["size"]
-    s = spec["spotlight"]
-    key = get_theme(theme)["key"][:3]
-    image = Image.new("RGBA", (W, H), SPOTLIGHT_BLACK + (255,))
+    g = spec["gradient"]
+    margin = spec["margin"]
+    color = _card2_gradient_color(slide.get("title_color"))
+    light = _badge_text_color(color) != (255, 255, 255, 255)
+    ink = CARD2_INK if light else (255, 255, 255, 255)
+    sub_color = (62, 62, 62, 255) if light else (236, 236, 240, 255)
 
-    cx, cy, r = s["circle"]
-    d = r * 2
-    disc = _radial_mask(d, lambda t: 255 if t < 0.995 else 0).filter(ImageFilter.GaussianBlur(2))
     if photo is not None:
-        # The circle is filled edge to edge; an uncropped upload is still cropped
-        # here, kept toward the top where faces and subjects usually are.
-        fitted = resize_to_cover(photo, d, d, 0.3 if photo_anchor is None else photo_anchor)
-        image.paste(fitted.convert("RGB"), (cx - r, cy - r), disc)
-        # Darken toward the rim, like a lens vignette.
-        shade = _radial_mask(d, lambda t: 0 if t < 0.62 else 175 * ((t - 0.62) / 0.38) ** 2)
-        image.paste(Image.new("RGB", (d, d), SPOTLIGHT_BLACK), (cx - r, cy - r), shade)
+        # Edge to edge; an uncropped upload is kept toward the top, where
+        # faces usually are, since the gradient covers the bottom anyway.
+        fitted = resize_to_cover(photo, W, H, 0.3 if photo_anchor is None else photo_anchor)
+        image = fitted.convert("RGBA")
     else:
-        image.paste(Image.new("RGB", (d, d), _mix(key, SPOTLIGHT_BLACK, 0.35)), (cx - r, cy - r), disc)
+        image = Image.new("RGBA", (W, H), _mix(color, (225, 225, 228), 0.5) + (255,))
 
-    # A soft glow of the theme color along the rim.
-    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(glow).ellipse([cx - r, cy - r, cx + r, cy + r], outline=key + (150,), width=10)
-    image.alpha_composite(glow.filter(ImageFilter.GaussianBlur(14)))
+    # Headline: the biggest step that fits in two lines, else three. A stroke
+    # in the same color thickens the heavy weight further.
+    title, _ = _highlight_marked(_headline_text(headline))
+    lines = None
+    for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
+        for size, line_height in g["title_steps"]:
+            font = get_system_font(size, bold=True)
+            stroke = max(2, size // 30)
+            candidate = wrap_text(title, font, g["wrap"] - stroke * 2)
+            if len(candidate) <= max_lines:
+                lines = candidate
+                break
+        if lines:
+            break
+    if not lines:
+        lines = _cap_rows(candidate, SPOTLIGHT_TITLE_MAX_LINES, font, g["wrap"] - stroke * 2)
 
-    # Black fade over the bottom, fully black by fade_end.
-    fade_top, fade_end = s["fade"]
+    # Sub-copy: up to two small lines in the regular weight ('**' = bold).
+    sub_size, sub_line = g["sub"]
+    sub_rows = []
+    for logical in cover_sub_lines(remove_emojis(slide.get("sub_text") or ""), SPOTLIGHT_BODY_MAX_LINES):
+        clean, bold = strip_highlight_markers(logical)
+        sub_font = get_system_font(sub_size, bold=bold)
+        sub_rows += [(piece, sub_font) for piece in wrap_text(clean.strip(), sub_font, g["wrap"])]
+    if len(sub_rows) > SPOTLIGHT_BODY_MAX_LINES:
+        sub_rows = sub_rows[:SPOTLIGHT_BODY_MAX_LINES]
+        text, sub_font = sub_rows[-1]
+        sub_rows[-1] = (_ellipsize(text, sub_font, g["wrap"]), sub_font)
+
+    # Stack the block up from the bottom: pill, headline, sub-copy.
+    label_font = get_system_font(g["label"])
+    l_top, l_bottom = _font_band(label_font, SPOTLIGHT_LABEL)
+    pad_x, pad_y = int(g["label"] * 0.75), int(g["label"] * 0.42)
+    pill_w = _text_width(label_font, SPOTLIGHT_LABEL) + pad_x * 2
+    pill_h = (l_bottom - l_top) + pad_y * 2
+    t_top, t_bottom = _font_band(font)
+    title_h = (len(lines) - 1) * line_height + (t_bottom - t_top) + stroke * 2
+    s_top, s_bottom = _font_band(get_system_font(sub_size))
+    sub_h = ((len(sub_rows) - 1) * sub_line + (s_bottom - s_top) + g["sub_gap"]) if sub_rows else 0
+    block_top = H - g["bottom"] - sub_h - title_h - g["label_gap"] - pill_h
+    title_top = block_top + pill_h + g["label_gap"]
+
+    # The gradient: clear well above the block, solid from the headline's
+    # middle down, on an eased ramp so the photo melts into the color.
+    fade_top = max(0, block_top - int(H * 0.30))
+    fade_full = min(H, title_top + title_h // 2)
     column = Image.new("L", (1, H), 0)
     for y in range(fade_top, H):
-        t = min(1.0, (y - fade_top) / max(1, fade_end - fade_top))
-        column.putpixel((0, y), int(255 * t ** 1.4))
-    image.paste(Image.new("RGB", (W, H), SPOTLIGHT_BLACK), (0, 0), column.resize((W, H)))
+        t = min(1.0, (y - fade_top) / max(1, fade_full - fade_top))
+        column.putpixel((0, y), int(255 * (t * t * (3 - 2 * t))))
+    image.paste(Image.new("RGB", (W, H), color), (0, 0), column.resize((W, H)))
 
     draw = ImageDraw.Draw(image)
-    lx, ly, lsize = s["label"]
-    draw.text((lx, ly), SPOTLIGHT_LABEL, fill=(255, 255, 255, 220), font=get_system_font(lsize))
+    # "always good" pill: dark on light gradients, white on dark ones.
+    pill_fill = (24, 24, 24, 255) if light else (255, 255, 255, 255)
+    pill_ink = (255, 255, 255, 255) if light else CARD2_INK
+    draw.rounded_rectangle([margin, block_top, margin + pill_w, block_top + pill_h],
+                           radius=pill_h // 2, fill=pill_fill)
+    draw.text((margin + pad_x, block_top + pad_y - l_top), SPOTLIGHT_LABEL, fill=pill_ink, font=label_font)
 
-    # Headline: the biggest step that fits in two lines, else in three. It and
-    # the small body lines under it are centered and anchored to the bottom.
-    # '**' words are painted in the theme's key color.
-    title, marked = _highlight_marked(_headline_text(headline))
-    fitted_lines = None
-    for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
-        for size, line_height in s["title_steps"]:
-            font = get_system_font(size, bold=True)
-            lines = wrap_text(title, font, s["title_wrap"])
-            if len(lines) <= max_lines:
-                fitted_lines = lines
-                break
-        if fitted_lines:
-            break
-    lines = _cap_rows(lines, SPOTLIGHT_TITLE_MAX_LINES, font, s["title_wrap"])
-
-    # Body: up to two short lines in the regular weight; a '**' line is bold white.
-    body_size, body_line = s["body"]
-    body_rows = []
-    for logical in cover_sub_lines(remove_emojis(slide.get("sub_text") or ""), SPOTLIGHT_BODY_MAX_LINES):
-        clean, has_highlight = strip_highlight_markers(logical)
-        body_font = get_system_font(body_size, bold=has_highlight)
-        color = (255, 255, 255, 255) if has_highlight else (215, 215, 220, 255)
-        body_rows += [(piece, body_font, color) for piece in wrap_text(clean.strip(), body_font, s["title_wrap"])]
-    if len(body_rows) > SPOTLIGHT_BODY_MAX_LINES:
-        body_rows = body_rows[:SPOTLIGHT_BODY_MAX_LINES]
-        text, body_font, color = body_rows[-1]
-        body_rows[-1] = (_ellipsize(text, body_font, s["title_wrap"]), body_font, color)
-
-    # Lay out the block centered on the canvas, then draw it over a tight, dark
-    # shadow so it stays readable on a bright part of the photo.
-    title_h = (len(lines) - 1) * line_height + size
-    body_h = (len(body_rows) - 1) * body_line + body_size + s["body_gap"] if body_rows else 0
-    y = s["center_y"] - (title_h + body_h) // 2
-    # The headline is white unless the user picked an accent color for it; when
-    # that is the theme color itself, the '**' words flip to white to stand out.
-    white, accent = (255, 255, 255, 255), key + (255,)
-    base = white
-    if slide.get("title_color") in THEMES:
-        base = THEMES[slide["title_color"]]["key"][:3] + (255,)
-        if base == accent:
-            accent = white
-    placed, cursor = [], 0
-    shown_counts = _reveal_counts(lines, slide.get("_reveal"))
-    for line_no, line in enumerate(lines):
-        # Each line is split into runs of (start, end, color) by its marked characters.
-        pos = title.find(line.rstrip("…"), cursor)
-        if pos >= 0:
-            cursor = pos + len(line.rstrip("…"))
-        runs = []
-        for i, ch in enumerate(line):
-            color = accent if pos >= 0 and pos + i in marked and ch != "…" else base
-            if runs and runs[-1][2] == color:
-                runs[-1] = (runs[-1][0], i + 1, color)
-            else:
-                runs.append((i, i + 1, color))
-        # Typing effect: the line keeps its centered spot and fills in from the left.
-        shown = shown_counts[line_no]
-        runs = [(a, min(b, shown), c) for a, b, c in runs if a < shown]
-        placed.append(((W - _text_width(font, line)) // 2, y, line[:shown], font, runs))
+    # Headline, typed in line by line for the Shorts cut.
+    y = title_top + stroke - t_top
+    for line, shown in zip(lines, _reveal_counts(lines, slide.get("_reveal"))):
+        if shown:
+            draw_text_safe(draw, (margin + stroke, y), line[:shown], fill=ink, font=font,
+                           stroke_width=stroke, stroke_fill=ink)
         y += line_height
-    y += size - line_height + s["body_gap"]
-    for text, body_font, color in body_rows:
-        placed.append(((W - _text_width(body_font, text)) // 2, y, text, body_font, [(0, len(text), color)]))
-        y += body_line
 
-    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow)
-    for x, ty, text, text_font, _ in placed:
-        s_draw.text((x + 2, ty + 3), text, fill=(0, 0, 0, 255), font=text_font)
-    image.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(4)))
-    draw = ImageDraw.Draw(image)
-    for x, ty, text, text_font, runs in placed:
-        for start, end, color in runs:
-            rx = x + (_text_width(text_font, text[:start]) if start else 0)
-            draw_text_safe(draw, (rx, ty), text[start:end], fill=color, font=text_font)
+    y = title_top + title_h + g["sub_gap"] - s_top
+    for text, sub_font in sub_rows:
+        draw_text_safe(draw, (margin, y), text, fill=sub_color, font=sub_font)
+        y += sub_line
     return image
 
 
@@ -1645,8 +1627,8 @@ def draw_card_layout(slide: dict, total_pages: int, hooking_title: str, article_
         return draw_paper_cover(slide, hooking_title, post_photo, article_title=article_title,
                                 theme=theme, canvas=canvas, photo_anchor=photo_anchor)
     if slide_type == "single" and slide.get("design") == "card2":
-        return draw_spotlight_single(slide, hooking_title, post_photo, article_title=article_title,
-                                     theme=theme, canvas=canvas, photo_anchor=photo_anchor)
+        return draw_gradient_single(slide, hooking_title, post_photo, article_title=article_title,
+                                    theme=theme, canvas=canvas, photo_anchor=photo_anchor)
     if slide_type == "single":
         return draw_paper_single(slide, hooking_title, post_photo, article_title=article_title,
                                  theme=theme, canvas=canvas, photo_anchor=photo_anchor)
