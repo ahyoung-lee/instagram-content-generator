@@ -145,6 +145,8 @@ def get_theme(name: str) -> dict:
 # labels, Regular for body copy.
 BRAND_FONT_BOLD = "NanumSquareRoundEB.ttf"
 BRAND_FONT_REGULAR = "NanumSquareRoundR.ttf"
+# Card 2 sets all of its type (pill, headline, sub-copy) in Pretendard ExtraBold.
+CARD2_FONT = "Pretendard-ExtraBold.otf"
 
 
 def get_system_font(size: int, bold: bool = False):
@@ -239,6 +241,18 @@ def get_system_font(size: int, bold: bool = False):
                 continue
     # Fallback to default Pillow font if none found
     return ImageFont.load_default()
+
+def get_card2_font(size: int):
+    """Pretendard ExtraBold for Card 2, falling back to the brand heavy weight."""
+    workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for directory in (workspace_root, os.path.dirname(os.path.abspath(__file__))):
+        path = os.path.join(directory, CARD2_FONT)
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+    return get_system_font(size, bold=True)
 
 def get_emoji_font(size: int):
     """
@@ -1323,13 +1337,16 @@ SINGLE_DESIGNS = ("card1", "card2", "card3")
 CARD2_DEFAULT_GRADIENT = "yellow"
 CARD2_YELLOW = (240, 252, 28)  # the default gradient, a bright lemon-lime
 CARD2_INK = (12, 12, 12, 255)
+CARD2_BLACK = (10, 10, 10)  # the black gradient option
 
 
 def _card2_gradient_color(name: Optional[str]) -> tuple:
-    """RGB of the Card 2 gradient: white, the default yellow or a theme color."""
+    """RGB of the Card 2 gradient: white, black, the default yellow or a theme color."""
     name = name or CARD2_DEFAULT_GRADIENT
     if name == "white":
         return (255, 255, 255)
+    if name == "black":
+        return CARD2_BLACK
     if name == CARD2_DEFAULT_GRADIENT:
         return CARD2_YELLOW
     return THEMES.get(name, THEMES[CARD2_DEFAULT_GRADIENT])["key"][:3]
@@ -1368,14 +1385,15 @@ def draw_gradient_single(slide: dict, hooking_title: str, photo: Optional[Image.
     else:
         image = Image.new("RGBA", (W, H), _mix(color, (225, 225, 228), 0.5) + (255,))
 
-    # Headline: the biggest step that fits in two lines, else three. A stroke
-    # in the same color thickens the heavy weight further.
+    # Headline: the biggest step that fits in two lines, else three. Pretendard
+    # ExtraBold is heavy enough on its own, so no thickening stroke (it clogs
+    # the counters of Hangul like 겨, 철).
     title, _ = _highlight_marked(_headline_text(headline))
     lines = None
     for max_lines in (2, SPOTLIGHT_TITLE_MAX_LINES):
         for size, line_height in g["title_steps"]:
-            font = get_system_font(size, bold=True)
-            stroke = max(2, size // 30)
+            font = get_card2_font(size)
+            stroke = 0
             candidate = wrap_text(title, font, g["wrap"] - stroke * 2)
             if len(candidate) <= max_lines:
                 lines = candidate
@@ -1385,12 +1403,12 @@ def draw_gradient_single(slide: dict, hooking_title: str, photo: Optional[Image.
     if not lines:
         lines = _cap_rows(candidate, SPOTLIGHT_TITLE_MAX_LINES, font, g["wrap"] - stroke * 2)
 
-    # Sub-copy: up to two small lines in the regular weight ('**' = bold).
+    # Sub-copy: up to two small lines ('**' markers are dropped: all one weight).
     sub_size, sub_line = g["sub"]
     sub_rows = []
     for logical in cover_sub_lines(remove_emojis(slide.get("sub_text") or ""), SPOTLIGHT_BODY_MAX_LINES):
-        clean, bold = strip_highlight_markers(logical)
-        sub_font = get_system_font(sub_size, bold=bold)
+        clean, _ = strip_highlight_markers(logical)
+        sub_font = get_card2_font(sub_size)
         sub_rows += [(piece, sub_font) for piece in wrap_text(clean.strip(), sub_font, g["wrap"])]
     if len(sub_rows) > SPOTLIGHT_BODY_MAX_LINES:
         sub_rows = sub_rows[:SPOTLIGHT_BODY_MAX_LINES]
@@ -1398,14 +1416,14 @@ def draw_gradient_single(slide: dict, hooking_title: str, photo: Optional[Image.
         sub_rows[-1] = (_ellipsize(text, sub_font, g["wrap"]), sub_font)
 
     # Stack the block up from the bottom: pill, headline, sub-copy.
-    label_font = get_system_font(g["label"])
+    label_font = get_card2_font(g["label"])
     l_top, l_bottom = _font_band(label_font, SPOTLIGHT_LABEL)
     pad_x, pad_y = int(g["label"] * 0.75), int(g["label"] * 0.42)
     pill_w = _text_width(label_font, SPOTLIGHT_LABEL) + pad_x * 2
     pill_h = (l_bottom - l_top) + pad_y * 2
     t_top, t_bottom = _font_band(font)
     title_h = (len(lines) - 1) * line_height + (t_bottom - t_top) + stroke * 2
-    s_top, s_bottom = _font_band(get_system_font(sub_size))
+    s_top, s_bottom = _font_band(get_card2_font(sub_size))
     sub_h = ((len(sub_rows) - 1) * sub_line + (s_bottom - s_top) + g["sub_gap"]) if sub_rows else 0
     block_top = H - g["bottom"] - sub_h - title_h - g["label_gap"] - pill_h
     title_top = block_top + pill_h + g["label_gap"]
@@ -1460,6 +1478,8 @@ CARD3_BRIGHT_YELLOW = (255, 236, 0, 255)  # the default bar, brighter than the t
 def _card3_bar_color(name: Optional[str]) -> tuple:
     if name == "white":
         return (255, 255, 255, 255)
+    if name == "black":
+        return CARD2_BLACK + (255,)
     if (name or CARD3_DEFAULT_BAR) == CARD3_DEFAULT_BAR:
         return CARD3_BRIGHT_YELLOW
     return THEMES.get(name or CARD3_DEFAULT_BAR, THEMES[CARD3_DEFAULT_BAR])["key"][:3] + (255,)

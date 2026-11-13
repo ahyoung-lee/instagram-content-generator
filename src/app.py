@@ -66,7 +66,7 @@ class UpdateThemeRequest(BaseModel):
 
 class UpdateTitleColorRequest(BaseModel):
     date_str: str
-    title_color: str   # "white" or one of the THEMES names
+    title_color: str   # "white", "black" or one of the THEMES names
 
 class SlideTextEdit(BaseModel):
     page: int
@@ -766,8 +766,8 @@ def api_update_theme(payload: UpdateThemeRequest, x_access_key: Optional[str] = 
 @app.post("/api/update_title_color")
 def api_update_title_color(payload: UpdateTitleColorRequest, x_access_key: Optional[str] = Header(default=None)):
     """
-    Repaints the Card 2 bottom gradient (or the Card 3 headline bars) in white
-    or one of the accent colors.
+    Repaints the Card 2 bottom gradient (or the Card 3 headline bars) in white,
+    black (Card 2 picker) or one of the accent colors.
 
     The color rides on the slide, so later redraws keep it. Like a theme
     change, the copy and photo are reused and no paid API call is made.
@@ -776,7 +776,7 @@ def api_update_title_color(payload: UpdateTitleColorRequest, x_access_key: Optio
     try:
         from src.script_vision import THEMES
         title_color = (payload.title_color or "").strip().lower()
-        if title_color != "white" and title_color not in THEMES:
+        if title_color not in ("white", "black") and title_color not in THEMES:
             raise HTTPException(status_code=400, detail=f"알 수 없는 제목 색상입니다: {payload.title_color}")
 
         post_dir = os.path.join(SAVE_DIR, payload.date_str)

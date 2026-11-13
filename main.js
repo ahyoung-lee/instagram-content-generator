@@ -413,10 +413,14 @@ async function renderTitleColorPicker() {
     if (heading) heading.textContent = copy.heading;
     if (hint) hint.innerHTML = copy.hint;
     const themes = await loadThemes();
-    const options = [{ name: 'white', hex: '#ffffff' }].concat(themes);
+    // Card 2 can also take a black gradient.
+    const base = [{ name: 'white', hex: '#ffffff' }];
+    if (design === 'card2') base.push({ name: 'black', hex: '#0a0a0a' });
+    const options = base.concat(themes);
     titleColorSwatches.innerHTML = '';
     options.forEach(({ name, hex }) => {
-        const label = name === 'white' ? '흰색' : (THEME_LABELS[name] || name);
+        const label = name === 'white' ? '흰색' : name === 'black' ? '검정색'
+            : (THEME_LABELS[name] || name);
         const active = name === currentPostData.title_color;
         const chip = document.createElement('button');
         chip.type = 'button';
